@@ -1,0 +1,13 @@
+# Spring Boot
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/resources/archetype-resources/**
+!**/src/test/resources/archetype-resources/**
+
+# IDEs
+.idea/
+.vscode/
+*.iml
+
+# Secrets
+.env

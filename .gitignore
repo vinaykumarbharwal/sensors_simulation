@@ -1,0 +1,21 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDEs
+.idea/
+.vscode/
+
+# Node modules
+node_modules/
+dist/
+
+# Backend build
+target/
+
+# Secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
