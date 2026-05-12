@@ -1,10 +1,10 @@
 interface ExportButtonProps {
-  data: Record<string, unknown>[]
+  data: any[]
   filename: string
   label?: string
 }
 
-function toCsv(rows: Record<string, unknown>[]): string {
+function toCsv(rows: any[]): string {
   if (rows.length === 0) return ''
   const headers = Object.keys(rows[0])
   const escape = (v: unknown) => {

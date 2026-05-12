@@ -120,7 +120,7 @@ function Dashboard({ session, onSessionUpdate, onLogout }: DashboardProps) {
             Grouped controls for outpost sensors, satellite coverage, and maintenance logs.
           </p>
         </div>
-        <OperationsAdminPanel snapshot={map} userRole={session.role} />
+        <OperationsAdminPanel snapshot={map!} userRole={session.role} />
       </div>
     )
   }
