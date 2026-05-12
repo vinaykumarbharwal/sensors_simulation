@@ -5,7 +5,7 @@ export const API_BASE_URL = configuredApiBaseUrl && configuredApiBaseUrl.length 
   ? configuredApiBaseUrl
   : import.meta.env.DEV
     ? localApiBaseUrl
-    : '/api/v1'
+    : 'https://sensors-simulation.onrender.com/api/v1'
 
 export const DASHBOARD_POLL_MS = 20_000
 export const ALERT_HISTORY_LIMIT = 24
