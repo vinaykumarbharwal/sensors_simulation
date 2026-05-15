@@ -42,6 +42,9 @@ public class SensorEntity {
     @Column(nullable = false, length = 64)
     private String createdByRole;
 
+    @Column(length = 64)
+    private String createdByUsername;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "zone_id")
     private ForestZoneEntity zone;
@@ -72,6 +75,9 @@ public class SensorEntity {
 
     public String getCreatedByRole() { return createdByRole; }
     public void setCreatedByRole(String createdByRole) { this.createdByRole = createdByRole; }
+
+    public String getCreatedByUsername() { return createdByUsername; }
+    public void setCreatedByUsername(String createdByUsername) { this.createdByUsername = createdByUsername; }
 
     public ForestZoneEntity getZone() { return zone; }
     public void setZone(ForestZoneEntity zone) { this.zone = zone; }

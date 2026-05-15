@@ -126,7 +126,18 @@ public class ForestFireController {
      * Forest map snapshot — zone markers plus sensor pins for the frontend map.
      */
     @GetMapping("/map")
-    public ResponseEntity<ForestMapSnapshot> getForestMap() {
-        return ResponseEntity.ok(simulationService.getForestMapSnapshot());
+    public ResponseEntity<ForestMapSnapshot> getForestMap(org.springframework.security.core.Authentication auth) {
+        String username = auth != null ? auth.getName() : "anonymous";
+        String role = "ANONYMOUS";
+        
+        if (auth != null) {
+            role = auth.getAuthorities().stream()
+                    .map(r -> r.getAuthority())
+                    .map(r -> r.replace("ROLE_", ""))
+                    .findFirst()
+                    .orElse("ANONYMOUS");
+        }
+        
+        return ResponseEntity.ok(simulationService.getForestMapSnapshot(username, role));
     }
 }

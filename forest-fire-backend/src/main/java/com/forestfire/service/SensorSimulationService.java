@@ -365,7 +365,7 @@ public class SensorSimulationService {
         return sensorReadingRepository.deleteByTimestampBefore(cutoff);
     }
 
-    public ForestMapSnapshot getForestMapSnapshot() {
+    public ForestMapSnapshot getForestMapSnapshot(String username, String role) {
         List<ZoneStatus> zones = getAllZoneStatuses();
         
         // Batch fetch all metadata to avoid N+1 queries
@@ -393,16 +393,28 @@ public class SensorSimulationService {
             List<ForestMapSensor> mapSensors = new ArrayList<>();
 
             for (SensorReading reading : readings) {
+                SensorEntity sensorEntity = sensorMap.get(reading.getSensorId());
+                
+                // FILTERING LOGIC: If role is EMPLOYEE, only show sensors they created.
+                // If a sensor has no creator (system sensor) or a different creator, hide it.
+                // HEAD role sees all sensors.
+                if (ROLE_EMPLOYEE.equalsIgnoreCase(role)) {
+                    String creator = (sensorEntity != null) ? sensorEntity.getCreatedByUsername() : null;
+                    if (creator == null || !creator.equalsIgnoreCase(username)) {
+                        continue; // Skip sensors not built by this specific employee
+                    }
+                }
+
                 SensorCoordinate coordinate = resolveSensorCoordinate(
                         zone.getLatitude(),
                         zone.getLongitude(),
                         reading.getLocation()
                 );
 
-                SensorEntity sensorEntity = sensorMap.get(reading.getSensorId());
                 String sensorModel = sensorEntity != null ? sensorEntity.getModel() : reading.getSensorType();
                 double coverageRadiusKm = sensorEntity != null ? sensorEntity.getCoverageRadiusKm() : 0.0;
                 String createdByRole = sensorEntity != null ? sensorEntity.getCreatedByRole() : "UNKNOWN";
+                String createdByUsername = sensorEntity != null ? sensorEntity.getCreatedByUsername() : "system";
 
                 mapSensors.add(new ForestMapSensor(
                         reading.getSensorId(),
@@ -418,7 +430,8 @@ public class SensorSimulationService {
                         reading.getTimestamp(),
                         reading.getDangerThreshold(),
                         coverageRadiusKm,
-                        createdByRole
+                        createdByRole,
+                        createdByUsername
                 ));
 
                 totalSensors++;
@@ -468,7 +481,7 @@ public class SensorSimulationService {
     }
 
     @Transactional
-    public synchronized ForestMapSensor registerAdminSensor(AdminSensorRequest request, String actorRole) {
+    public synchronized ForestMapSensor registerAdminSensor(AdminSensorRequest request, String actorRole, String creatorUsername) {
         if (!ROLE_EMPLOYEE.equalsIgnoreCase(actorRole)) {
             throw new IllegalArgumentException("Only EMPLOYEE role can add sensors");
         }
@@ -492,6 +505,7 @@ public class SensorSimulationService {
         entity.setLongitude(request.getLongitude());
         entity.setCoverageRadiusKm(coverageRadiusKm);
         entity.setCreatedByRole(createdByRole);
+        entity.setCreatedByUsername(creatorUsername);
         entity.setZone(zoneEntity);
 
         SensorEntity saved = sensorRepository.save(entity);
@@ -521,7 +535,8 @@ public class SensorSimulationService {
                 LocalDateTime.now(),
                 inferDangerThreshold(sensorType),
                 saved.getCoverageRadiusKm(),
-                saved.getCreatedByRole()
+                saved.getCreatedByRole(),
+                saved.getCreatedByUsername()
         );
     }
 

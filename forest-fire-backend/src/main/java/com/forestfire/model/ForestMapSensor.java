@@ -18,13 +18,14 @@ public class ForestMapSensor {
     private double dangerThreshold;
     private double coverageRadiusKm;
     private String createdByRole;
+    private String createdByUsername;
 
     public ForestMapSensor() {}
 
     public ForestMapSensor(String sensorId, String sensorType, String model, String zone, String location,
                            double latitude, double longitude, double value, String unit,
                            String status, LocalDateTime timestamp, double dangerThreshold,
-                           double coverageRadiusKm, String createdByRole) {
+                           double coverageRadiusKm, String createdByRole, String createdByUsername) {
         this.sensorId = sensorId;
         this.sensorType = sensorType;
         this.model = model;
@@ -39,6 +40,7 @@ public class ForestMapSensor {
         this.dangerThreshold = dangerThreshold;
         this.coverageRadiusKm = coverageRadiusKm;
         this.createdByRole = createdByRole;
+        this.createdByUsername = createdByUsername;
     }
 
     public String getSensorId() { return sensorId; }
@@ -82,4 +84,7 @@ public class ForestMapSensor {
 
     public String getCreatedByRole() { return createdByRole; }
     public void setCreatedByRole(String createdByRole) { this.createdByRole = createdByRole; }
+
+    public String getCreatedByUsername() { return createdByUsername; }
+    public void setCreatedByUsername(String createdByUsername) { this.createdByUsername = createdByUsername; }
 }

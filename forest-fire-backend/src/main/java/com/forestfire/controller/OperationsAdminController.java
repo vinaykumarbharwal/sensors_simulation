@@ -35,9 +35,9 @@ public class OperationsAdminController {
 
     @PostMapping("/sensors")
     @PreAuthorize("hasRole('EMPLOYEE')")
-    public ResponseEntity<ForestMapSensor> createSensor(@RequestBody AdminSensorRequest request) {
+    public ResponseEntity<ForestMapSensor> createSensor(@RequestBody AdminSensorRequest request, java.security.Principal principal) {
         try {
-            return ResponseEntity.ok(simulationService.registerAdminSensor(request, "EMPLOYEE"));
+            return ResponseEntity.ok(simulationService.registerAdminSensor(request, "EMPLOYEE", principal.getName()));
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
         }

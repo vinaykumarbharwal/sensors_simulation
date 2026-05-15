@@ -183,13 +183,15 @@ export function OperationsAdminPanel({ snapshot, userRole }: OperationsAdminPane
             <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-text-secondary dark:text-slate-400">Outpost directory</p>
             <h3 className="text-base font-bold text-text-primary dark:text-white">All saved outposts</h3>
           </div>
-          <button
-            type="button"
-            onClick={() => setEditingOutpostId(null)}
-            className="rounded-full border border-border-subtle bg-white px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-bg-canvas dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-          >
-            New outpost
-          </button>
+          {isHead && (
+            <button
+              type="button"
+              onClick={() => setEditingOutpostId(null)}
+              className="rounded-full border border-border-subtle bg-white px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-bg-canvas dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              New outpost
+            </button>
+          )}
         </div>
 
         <div className="grid gap-3 lg:grid-cols-2">
@@ -217,22 +219,24 @@ export function OperationsAdminPanel({ snapshot, userRole }: OperationsAdminPane
                 Equipment: {outpost.availableEquipment.join(', ') || 'None assigned'}
               </p>
 
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setEditingOutpostId(outpost.outpostId)}
-                  className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-700"
-                >
-                  Manage
-                </button>
-                <button
-                  type="button"
-                  onClick={() => deleteOutpost(outpost.outpostId)}
-                  className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-950/50"
-                >
-                  Delete
-                </button>
-              </div>
+              {isHead && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingOutpostId(outpost.outpostId)}
+                    className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-700"
+                  >
+                    Manage
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteOutpost(outpost.outpostId)}
+                    className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-950/50"
+                  >
+                    Delete
+                  </button>
+                </div>
+              )}
             </article>
           ))}
         </div>
