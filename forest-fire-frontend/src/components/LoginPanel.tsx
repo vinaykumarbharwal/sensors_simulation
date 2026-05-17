@@ -26,41 +26,55 @@ export function LoginPanel({ onLoggedIn }: LoginPanelProps) {
   }
 
   return (
-    <main className="grid min-h-screen place-items-center px-4 py-10 bg-bg-canvas">
-      <article className="w-full max-w-[400px] bg-bg-surface p-10 rounded-2xl border border-border-subtle shadow-card">
-        <div className="flex flex-col items-center mb-8">
-          <div className="h-12 w-12 rounded-xl bg-accent-primary grid place-items-center text-2xl shadow-lg shadow-accent-primary/20">🌲</div>
-          <p className="mt-4 heading-caps text-accent-primary">Vanrakshak</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-text-primary">Welcome back</h1>
-          <p className="mt-2 text-sm text-center text-text-secondary">
-            Secure access to the national forest monitoring network.
+    <main className="grid min-h-screen place-items-center px-4 py-10 bg-gradient-to-br from-[#1C2B22] via-[#0E1712] to-[#121c16]">
+      <article className="relative w-full max-w-[450px] bg-white/95 backdrop-blur-md p-10 rounded-3xl border border-white/20 shadow-2xl overflow-hidden">
+        {/* Elegant Tricolor Header Bar */}
+        <div className="absolute top-0 left-0 right-0 h-2 flex">
+          <span className="flex-1 bg-[#FF9933]"></span>
+          <span className="flex-1 bg-[#FFFFFF]"></span>
+          <span className="flex-1 bg-[#138808]"></span>
+        </div>
+
+        <div className="flex flex-col items-center mb-8 mt-2">
+          {/* Official Indian Seal / Emblem placeholder */}
+          <div className="h-16 w-16 rounded-full border-2 border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-emerald-500/10 flex items-center justify-center text-3xl shadow-md">
+            🇮🇳
+          </div>
+          <p className="mt-4 text-xs font-black text-amber-600 tracking-[0.2em] uppercase leading-none">GOVT. OF INDIA</p>
+          <p className="mt-1.5 text-[10px] font-bold text-slate-500 tracking-wider uppercase leading-none">Ministry of Environment, Forest & Climate Change</p>
+          
+          <div className="w-full border-b border-slate-200/80 my-4"></div>
+          
+          <h1 className="text-xl font-extrabold text-slate-900 leading-tight">VANRAKSHAK</h1>
+          <p className="mt-2 text-xs text-center text-slate-600 max-w-[300px]">
+            National Forest Surveillance & Telemetry Grid (NFSTG). Authorized access gateway.
           </p>
         </div>
 
         {error && (
-          <div className="mb-6 rounded-lg bg-status-critical/10 border border-status-critical/20 px-4 py-3 text-xs font-medium text-status-critical">
-            {error}
+          <div className="mb-6 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-xs font-semibold text-red-700">
+            ⚠️ {error}
           </div>
         )}
 
         <div className="space-y-5">
           <label className="block">
-            <span className="heading-caps mb-1.5 block">Username</span>
+            <span className="heading-caps mb-1.5 block text-slate-500 font-bold">Username</span>
             <input
               value={username}
               onChange={(event) => setUsername(event.target.value)}
-              className="w-full rounded-lg border border-border-subtle bg-bg-canvas px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-[var(--accent-secondary)] focus:outline-none transition-all"
-              placeholder="Enter your username"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:outline-none focus:ring-4 focus:ring-emerald-500/20 transition-all font-medium"
+              placeholder="Enter your government login ID"
             />
           </label>
 
           <label className="block">
-            <span className="heading-caps mb-1.5 block">Password</span>
+            <span className="heading-caps mb-1.5 block text-slate-500 font-bold">Password</span>
             <input
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="w-full rounded-lg border border-border-subtle bg-bg-canvas px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-[var(--accent-secondary)] focus:outline-none transition-all"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:outline-none focus:ring-4 focus:ring-emerald-500/20 transition-all font-medium"
               placeholder="••••••••"
             />
           </label>
@@ -69,18 +83,19 @@ export function LoginPanel({ onLoggedIn }: LoginPanelProps) {
             type="button"
             disabled={busy || username.trim().length === 0 || password.trim().length === 0}
             onClick={submit}
-            className="w-full rounded-lg bg-[var(--accent-secondary)] px-4 py-3 text-sm font-bold text-white shadow-lg shadow-blue-500/20 transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full rounded-xl bg-[#FF9933] hover:bg-[#e68220] active:scale-[0.98] py-3.5 text-sm font-black tracking-wider text-white shadow-lg shadow-[#FF9933]/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {busy ? 'Verifying...' : 'Sign in to Dashboard'}
+            {busy ? 'VERIFYING SECURITY CREDENTIALS...' : 'SECURE SIGN IN'}
           </button>
         </div>
 
-        <div className="mt-8 pt-6 border-t border-border-subtle">
-          <p className="text-[11px] text-center text-text-muted">
-            Authorized Personnel Only. System activity is logged for security auditing.
+        <div className="mt-8 pt-6 border-t border-slate-200">
+          <p className="text-[10px] text-center text-slate-500 leading-relaxed font-medium">
+            This is a protected National Grid. Access to unauthorized personnel is strictly prohibited and subject to legal action under the Information Technology Act.
           </p>
         </div>
       </article>
     </main>
   )
 }
+

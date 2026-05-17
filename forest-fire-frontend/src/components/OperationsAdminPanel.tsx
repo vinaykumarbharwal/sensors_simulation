@@ -191,23 +191,24 @@ export function OperationsAdminPanel({ snapshot, userRole }: OperationsAdminPane
         <div className="flex items-end justify-between gap-3">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-text-secondary dark:text-slate-400">Zone Directory</p>
-            <h3 className="text-base font-bold text-text-primary dark:text-white">All zones and outposts</h3>
+            <h3 className="text-base font-bold text-text-primary dark:text-white">
+              {isEmployee ? 'Your assigned zone and outpost' : 'All zones and outposts'}
+            </h3>
           </div>
-          {isHead && (
-            <button
-              type="button"
-              onClick={() => setEditingOutpostId(null)}
-              className="rounded-full border border-border-subtle bg-white px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-bg-canvas dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              New outpost
-            </button>
-          )}
+
         </div>
 
         <div className="grid gap-4 lg:grid-cols-2">
-          {zones.map((zone) => {
-            const outpost = zone.outpost
-            const sensors = zone.sensors ?? []
+          {zones
+            .filter((zone) => {
+              if (isEmployee && employeeAssignedZone) {
+                return zone.zoneName === employeeAssignedZone
+              }
+              return true
+            })
+            .map((zone) => {
+              const outpost = zone.outpost
+              const sensors = zone.sensors ?? []
 
             return (
               <article key={zone.zoneName} className="rounded-2xl border border-border-subtle bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">

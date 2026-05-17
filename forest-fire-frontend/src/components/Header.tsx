@@ -27,15 +27,20 @@ export function Header({ timestamp, status, database }: HeaderProps) {
   const formattedTime = timestamp ? new Date(timestamp).toLocaleTimeString() : 'N/A'
 
   return (
-    <header className="zone-card flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <header className="zone-card flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">
+      {/* Sleek top-border highlight for government design */}
+      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500/50 via-emerald-500/50 to-amber-500/50"></div>
+      
       <div className="max-w-2xl">
         <div className="flex items-center gap-2 mb-2">
-          <div className="h-6 w-6 rounded bg-accent-primary grid place-items-center text-xs">🌲</div>
-          <p className="heading-caps text-accent-primary">System Overview</p>
+          <div className="h-6 w-6 rounded bg-emerald-700/10 text-emerald-800 grid place-items-center text-xs font-bold">📡</div>
+          <p className="heading-caps text-emerald-700 font-bold">NATIONAL SURVEILLANCE GRID</p>
         </div>
-        <h2 className="text-2xl font-bold tracking-tight text-text-primary">Operational Intelligence Dashboard</h2>
-        <p className="mt-2 text-sm text-text-secondary leading-relaxed">
-          Unified telemetry node for forest rangers. Monitoring real-time sensor streams and automated fire risk assessment across all active belts.
+        <h2 className="text-2xl font-black tracking-tight text-slate-900 leading-tight">
+          Operational Telemetry Command Center
+        </h2>
+        <p className="mt-3 text-sm text-text-secondary leading-relaxed font-medium">
+          Unified command center monitoring active sensor streams, local outpost status, and real-time artificial intelligence wildfire risk calculations across all national zones.
         </p>
       </div>
 
@@ -47,9 +52,10 @@ export function Header({ timestamp, status, database }: HeaderProps) {
             <p className="text-xs font-bold text-text-primary text-mono">{formattedTime}</p>
           </div>
         </div>
-        <StatusPill label="API" value={status} />
-        <StatusPill label="Cloud DB" value={database} />
+        <StatusPill label="Govt Node API" value={status} />
+        <StatusPill label="National Cloud DB" value={database} />
       </div>
     </header>
   )
 }
+

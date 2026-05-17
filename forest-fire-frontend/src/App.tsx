@@ -24,19 +24,19 @@ interface PageDefinition {
 }
 
 const adminPages: PageDefinition[] = [
-  { id: 'overview', label: 'Overview Map', mobileLabel: 'Overview' },
-  { id: 'alerts', label: 'Alerts', mobileLabel: 'Alerts' },
+  { id: 'overview', label: 'Map Overview', mobileLabel: 'Map' },
+  { id: 'alerts', label: 'Alerts Control', mobileLabel: 'Alerts' },
   { id: 'operations', label: 'Admin Console', mobileLabel: 'Admin' },
   { id: 'health', label: 'System Health', mobileLabel: 'Health' },
-  { id: 'account', label: 'Account', mobileLabel: 'Account' },
+  { id: 'account', label: 'Profile & Settings', mobileLabel: 'Account' },
 ]
 
 const employeePages: PageDefinition[] = [
   { id: 'overview', label: 'Map Overview', mobileLabel: 'Map' },
-  { id: 'alerts', label: 'Alerts', mobileLabel: 'Alerts' },
+  { id: 'alerts', label: 'Alerts Control', mobileLabel: 'Alerts' },
   { id: 'operations', label: 'Outpost Management', mobileLabel: 'Ops' },
   { id: 'health', label: 'Sensor Health', mobileLabel: 'Health' },
-  { id: 'account', label: 'Account', mobileLabel: 'Account' },
+  { id: 'account', label: 'Profile & Settings', mobileLabel: 'Account' },
 ]
 
 function App() {
@@ -149,9 +149,26 @@ function Dashboard({ session, onSessionUpdate, onLogout }: DashboardProps) {
     <div className="flex h-screen overflow-hidden bg-bg-canvas font-ui">
       {/* ─── SIDEBAR ────────────────────────────────────────── */}
       <aside className="sidebar-nav flex flex-col shrink-0">
-        <div className="flex h-16 items-center gap-3 px-6 border-b border-white/10">
-          <div className="h-8 w-8 rounded-lg bg-accent-primary grid place-items-center text-lg">🌲</div>
-          <span className="text-lg font-bold tracking-tight text-white">VANRAKSHAK</span>
+        <div className="relative flex flex-col justify-center gap-1 px-6 py-5 border-b border-white/10 bg-gradient-to-b from-[#1C2B22] to-[#121c16]">
+          {/* Subtle Tricolor Ribbon on top of the sidebar */}
+          <div className="absolute top-0 left-0 right-0 h-1 flex">
+            <span className="flex-1 bg-[#FF9933]"></span>
+            <span className="flex-1 bg-[#FFFFFF]"></span>
+            <span className="flex-1 bg-[#138808]"></span>
+          </div>
+          
+          <div className="flex items-center gap-3 mt-1.5">
+            <div className="h-10 w-10 rounded-full border border-amber-500/40 bg-gradient-to-br from-amber-500/20 to-emerald-500/20 flex items-center justify-center text-xl shadow-inner shadow-amber-500/10">
+              🇮🇳
+            </div>
+            <div>
+              <p className="text-xs font-black text-amber-500 tracking-widest leading-none">GOVT GRID</p>
+              <h1 className="text-sm font-extrabold tracking-tight text-white mt-0.5 leading-none">VANRAKSHAK</h1>
+            </div>
+          </div>
+          <p className="text-[8.5px] font-semibold text-white/50 tracking-wider uppercase mt-1 leading-normal">
+            National Wildfire Telemetry Grid
+          </p>
         </div>
 
         <nav className="flex-1 space-y-1 p-4 overflow-y-auto">
@@ -202,19 +219,32 @@ function Dashboard({ session, onSessionUpdate, onLogout }: DashboardProps) {
       {/* ─── MAIN CONTENT ────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top Bar */}
-        <header className="h-16 flex items-center justify-between px-8 bg-bg-surface border-b border-border-subtle shrink-0">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-text-muted">Dashboard</span>
-            <span className="text-text-muted">/</span>
-            <span className="font-semibold text-text-primary">{activePageMeta.label}</span>
+        <header className="relative h-20 flex flex-col justify-center px-8 bg-white border-b border-border-subtle shrink-0 shadow-sm">
+          {/* Subtle Tricolor Ribbon */}
+          <div className="absolute top-0 left-0 right-0 h-1 flex">
+            <span className="flex-1 bg-[#FF9933]"></span>
+            <span className="flex-1 bg-[#FFFFFF]"></span>
+            <span className="flex-1 bg-[#138808]"></span>
           </div>
+          <div className="flex items-center justify-between mt-1">
+            <div className="flex flex-col gap-0.5">
+              <p className="text-[10px] font-bold tracking-widest text-[#FF9933] uppercase leading-none">
+                Govt. of India • National Security Grid
+              </p>
+              <div className="flex items-center gap-2 text-sm mt-1">
+                <span className="text-text-muted">Dashboard</span>
+                <span className="text-text-muted">/</span>
+                <span className="font-bold text-text-primary">{activePageMeta.label}</span>
+              </div>
+            </div>
 
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-bg-canvas border border-border-subtle text-[11px] font-medium text-text-secondary">
-              <span className={`pulse-dot ${refreshing ? 'bg-accent-primary' : 'bg-status-safe'}`} />
-              <span className="text-mono">{refreshing ? 'REFRESHING' : 'LIVE'}</span>
-              {syncTimestamp && <span className="opacity-20">|</span>}
-              {syncTimestamp && <span className="text-mono">{new Date(syncTimestamp).toLocaleTimeString()}</span>}
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200/80 text-[11px] font-bold text-text-secondary shadow-sm">
+                <span className={`pulse-dot ${refreshing ? 'bg-[#FF9933]' : 'bg-[#138808]'}`} />
+                <span className="text-mono tracking-wider">{refreshing ? 'REFRESHING' : 'SECURE CONNECTED'}</span>
+                {syncTimestamp && <span className="opacity-20">|</span>}
+                {syncTimestamp && <span className="text-mono">{new Date(syncTimestamp).toLocaleTimeString()}</span>}
+              </div>
             </div>
           </div>
         </header>
@@ -250,9 +280,8 @@ function Dashboard({ session, onSessionUpdate, onLogout }: DashboardProps) {
             )}
 
             {activePage === 'alerts' && (
-              <div className="grid gap-8 xl:grid-cols-[1.2fr_0.8fr] items-start">
+              <div className="w-full">
                 <AlertsPanel activeAlerts={activeAlerts} alertsHistory={alertsHistory} zones={map?.zones ?? []} />
-                {selectedZoneSummary && <ZoneSummaryCard zone={selectedZoneSummary} />}
               </div>
             )}
 

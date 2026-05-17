@@ -696,29 +696,6 @@ export function ForestMapPanel({ snapshot, onZoneSelect, role }: ForestMapPanelP
             </button>
           </div>
 
-          {/* Add Outpost Button - Top Right */}
-          {isHead && (
-            <button
-              type="button"
-              onClick={() => {
-                const nextMode = !addOutpostMode
-                setAddOutpostMode(nextMode)
-                if (!nextMode) {
-                  setPlacementPoint(null)
-                  setEmployees([])
-                  setSensors([])
-                }
-                setStatusMessage(nextMode ? 'Add Outpost mode is active. Right-click map to mark outpost location.' : null)
-              }}
-              className={`absolute right-3 top-3 z-[500] rounded-xl border px-4 py-2.5 text-sm font-bold transition ${
-                addOutpostMode
-                  ? 'border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300'
-                  : 'border-slate-300 bg-white text-slate-900 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700'
-              }`}
-            >
-              ➕ {addOutpostMode ? 'Cancel' : 'Add Outpost'}
-            </button>
-          )}
 
           <div className="pointer-events-none absolute left-4 top-4 z-[500] rounded-2xl border border-white/50 bg-white/90 px-4 py-3 text-xs text-slate-700 shadow-xl backdrop-blur dark:border-slate-700/60 dark:bg-slate-900/90 dark:text-slate-200">
             <p className="font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400">Map Layers</p>
