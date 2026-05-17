@@ -13,6 +13,8 @@ public class AdminOutpostRequest {
     private String operationalRole;
     private double coverageRadiusKm;
     private List<String> equipment;
+    private String employeeUsername;
+    private String employeePassword;
 
     public String getOutpostName() { return outpostName; }
     public void setOutpostName(String outpostName) { this.outpostName = outpostName; }
@@ -40,4 +42,10 @@ public class AdminOutpostRequest {
 
     public List<String> getEquipment() { return equipment; }
     public void setEquipment(List<String> equipment) { this.equipment = equipment; }
+
+    public String getEmployeeUsername() { return employeeUsername; }
+    public void setEmployeeUsername(String employeeUsername) { this.employeeUsername = employeeUsername; }
+
+    public String getEmployeePassword() { return employeePassword; }
+    public void setEmployeePassword(String employeePassword) { this.employeePassword = employeePassword; }
 }

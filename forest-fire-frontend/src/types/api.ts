@@ -39,6 +39,7 @@ export interface AccountProfile {
   username: string
   displayName: string
   role: 'EMPLOYEE' | 'HEAD' | string
+  assignedZone?: string
 }
 
 export interface MapResponsePlan {
@@ -75,6 +76,8 @@ export interface AdminOutpostRequest {
   operationalRole: string
   coverageRadiusKm: number
   equipment: string[]
+  employeeUsername?: string
+  employeePassword?: string
 }
 
 export interface EquipmentUsageRequest {
@@ -104,6 +107,7 @@ export interface AuthLoginResponse {
   displayName: string
   role: 'EMPLOYEE' | 'HEAD' | string
   expiresInMs: number
+  assignedZone?: string
 }
 
 export interface AuthSession {
@@ -111,6 +115,7 @@ export interface AuthSession {
   username: string
   displayName: string
   role: 'EMPLOYEE' | 'HEAD' | string
+  assignedZone?: string
 }
 
 export interface ZoneData {

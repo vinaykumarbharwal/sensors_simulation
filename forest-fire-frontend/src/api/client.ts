@@ -50,12 +50,13 @@ export function getAuthSession(): AuthSession | null {
   }
 
   try {
-    const parsed = JSON.parse(userJson) as { username: string; displayName?: string; role: string }
+    const parsed = JSON.parse(userJson) as { username: string; displayName?: string; role: string; assignedZone?: string }
     return {
       token,
       username: parsed.username,
       displayName: parsed.displayName ?? parsed.username,
       role: parsed.role,
+      assignedZone: parsed.assignedZone,
     }
   } catch {
     return null
@@ -64,19 +65,20 @@ export function getAuthSession(): AuthSession | null {
 
 export function saveAuthSession(response: AuthLoginResponse): AuthSession {
   window.localStorage.setItem(AUTH_TOKEN_KEY, response.token)
-  window.localStorage.setItem(AUTH_USER_KEY, JSON.stringify({ username: response.username, displayName: response.displayName, role: response.role }))
+  window.localStorage.setItem(AUTH_USER_KEY, JSON.stringify({ username: response.username, displayName: response.displayName, role: response.role, assignedZone: response.assignedZone }))
   return {
     token: response.token,
     username: response.username,
     displayName: response.displayName,
     role: response.role,
+    assignedZone: response.assignedZone,
   }
 }
 
 export function updateAuthSession(session: AuthSession) {
   window.localStorage.setItem(
     AUTH_USER_KEY,
-    JSON.stringify({ username: session.username, displayName: session.displayName, role: session.role }),
+    JSON.stringify({ username: session.username, displayName: session.displayName, role: session.role, assignedZone: session.assignedZone }),
   )
 }
 

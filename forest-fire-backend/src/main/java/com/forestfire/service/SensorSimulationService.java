@@ -67,6 +67,7 @@ public class SensorSimulationService {
     private final SensorRepository sensorRepository;
     private final SensorReadingRepository sensorReadingRepository;
     private final FireAlertRepository fireAlertRepository;
+    private final UserAccountService userAccountService;
 
     private final int readingRetentionDays;
 
@@ -77,12 +78,14 @@ public class SensorSimulationService {
                                    SensorRepository sensorRepository,
                                    SensorReadingRepository sensorReadingRepository,
                                    FireAlertRepository fireAlertRepository,
+                                   UserAccountService userAccountService,
                                    @Value("${app.readings.retention-days:30}") int readingRetentionDays) {
         this.forestZoneRepository = forestZoneRepository;
         this.outpostRepository = outpostRepository;
         this.sensorRepository = sensorRepository;
         this.sensorReadingRepository = sensorReadingRepository;
         this.fireAlertRepository = fireAlertRepository;
+        this.userAccountService = userAccountService;
         this.readingRetentionDays = readingRetentionDays;
         initializeSensors();
     }
@@ -561,6 +564,16 @@ public class SensorSimulationService {
         entity.setOperationalRole(StringUtils.hasText(request.getOperationalRole()) ? request.getOperationalRole().trim() : "MANPOWER_AND_UAV");
         entity.setCoverageRadiusKm(request.getCoverageRadiusKm() > 0 ? request.getCoverageRadiusKm() : 18.0);
         entity.setEquipmentCsv(toEquipmentCsv(normalizeEquipment(request.getEquipment(), zoneEntity.getName())));
+
+        if (StringUtils.hasText(request.getEmployeeUsername()) && StringUtils.hasText(request.getEmployeePassword())) {
+            userAccountService.registerAccount(
+                    request.getEmployeeUsername(),
+                    request.getEmployeePassword(),
+                    "EMPLOYEE",
+                    request.getEmployeeUsername(),
+                    zoneEntity.getName()
+            );
+        }
 
         return toMapOutpost(outpostRepository.save(entity));
     }

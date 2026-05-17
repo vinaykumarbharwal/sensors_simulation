@@ -46,13 +46,16 @@ public class AuthController {
                     .map(authority -> authority.startsWith("ROLE_") ? authority.substring(5) : authority)
                     .orElse("UNKNOWN");
 
+            String assignedZone = userAccountService.getAssignedZone(userDetails.getUsername());
+
             return ResponseEntity.ok(new AuthLoginResponse(
                     token,
                     "Bearer",
                     userDetails.getUsername(),
                     displayName,
                     role,
-                    jwtService.getJwtExpirationMs()
+                    jwtService.getJwtExpirationMs(),
+                    assignedZone
             ));
         } catch (BadCredentialsException ex) {
             throw new IllegalArgumentException("Invalid username or password");

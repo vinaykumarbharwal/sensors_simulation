@@ -27,8 +27,8 @@ public class UserAccountService implements UserDetailsService {
                               @Value("${app.security.head.username:head}") String headUsername,
                               @Value("${app.security.head.password:head123}") String headPassword) {
         this.passwordEncoder = passwordEncoder;
-        registerAccount(employeeUsername, employeePassword, "EMPLOYEE", defaultDisplayName(employeeUsername, "Field operator"));
-        registerAccount(headUsername, headPassword, "HEAD", defaultDisplayName(headUsername, "District head"));
+        registerAccount(employeeUsername, employeePassword, "EMPLOYEE", defaultDisplayName(employeeUsername, "Field operator"), "Central India");
+        registerAccount(headUsername, headPassword, "HEAD", defaultDisplayName(headUsername, "District head"), null);
     }
 
     @Override
@@ -74,8 +74,12 @@ public class UserAccountService implements UserDetailsService {
         return getAccount(username).role();
     }
 
-    private void registerAccount(String username, String password, String role, String displayName) {
-        accounts.put(normalize(username), new AccountRecord(username, passwordEncoder.encode(password), role, displayName));
+    public String getAssignedZone(String username) {
+        return getAccount(username).assignedZone();
+    }
+
+    public void registerAccount(String username, String password, String role, String displayName, String assignedZone) {
+        accounts.put(normalize(username), new AccountRecord(username, passwordEncoder.encode(password), role, displayName, assignedZone));
     }
 
     private AccountRecord getAccount(String username) {
@@ -99,12 +103,14 @@ public class UserAccountService implements UserDetailsService {
         private volatile String passwordHash;
         private final String role;
         private volatile String displayName;
+        private final String assignedZone;
 
-        private AccountRecord(String username, String passwordHash, String role, String displayName) {
+        private AccountRecord(String username, String passwordHash, String role, String displayName, String assignedZone) {
             this.username = username;
             this.passwordHash = passwordHash;
             this.role = role;
             this.displayName = displayName;
+            this.assignedZone = assignedZone;
         }
 
         private String username() {
@@ -129,6 +135,10 @@ public class UserAccountService implements UserDetailsService {
 
         private void setDisplayName(String displayName) {
             this.displayName = displayName;
+        }
+
+        private String assignedZone() {
+            return assignedZone;
         }
     }
 }

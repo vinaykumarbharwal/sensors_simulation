@@ -8,17 +8,19 @@ public class AuthLoginResponse {
     private String displayName;
     private String role;
     private long expiresInMs;
+    private String assignedZone;
 
     public AuthLoginResponse() {
     }
 
-    public AuthLoginResponse(String token, String tokenType, String username, String displayName, String role, long expiresInMs) {
+    public AuthLoginResponse(String token, String tokenType, String username, String displayName, String role, long expiresInMs, String assignedZone) {
         this.token = token;
         this.tokenType = tokenType;
         this.username = username;
         this.displayName = displayName;
         this.role = role;
         this.expiresInMs = expiresInMs;
+        this.assignedZone = assignedZone;
     }
 
     public String getToken() { return token; }
@@ -38,4 +40,7 @@ public class AuthLoginResponse {
 
     public long getExpiresInMs() { return expiresInMs; }
     public void setExpiresInMs(long expiresInMs) { this.expiresInMs = expiresInMs; }
+
+    public String getAssignedZone() { return assignedZone; }
+    public void setAssignedZone(String assignedZone) { this.assignedZone = assignedZone; }
 }

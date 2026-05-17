@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import 'leaflet/dist/leaflet.css'
 import { Circle, MapContainer, Marker, Popup, TileLayer, Tooltip, useMap } from 'react-leaflet'
 import { divIcon, latLngBounds, type LatLngBoundsExpression, type LatLngExpression } from 'leaflet'
-import { apiClient } from '../api/client'
+import { apiClient, getAuthSession } from '../api/client'
 import type { AdminOutpostRequest, AdminSensorRequest, MapSensor, MapSnapshot, ZoneData } from '../types/api'
 
 interface ForestMapPanelProps {
@@ -52,6 +52,14 @@ function squaredDistance(a: MapPoint, b: MapPoint): number {
   const dLat = a[0] - b[0]
   const dLng = a[1] - b[1]
   return dLat * dLat + dLng * dLng
+}
+
+function getAutoZone(lat: number, lng: number): string {
+  if (lat > 27.5) return 'North India';
+  if (lat < 16.5) return 'South India';
+  if (lng > 83.5) return 'East India';
+  if (lng < 74.5) return 'West India';
+  return 'Central India';
 }
 
 function createZoneIcon(zone: ZoneData) {
@@ -445,13 +453,24 @@ export function ForestMapPanel({ snapshot, onZoneSelect, role }: ForestMapPanelP
                 onPick={(nextPoint) => {
                   setPlacementPoint(nextPoint)
                   if (isHead) {
+                    const autoZone = getAutoZone(nextPoint[0], nextPoint[1]);
+                    setSelectedZoneName(autoZone);
                     setOutpostForm((previous) => ({
                       ...previous,
                       latitude: nextPoint[0],
                       longitude: nextPoint[1],
+                      zoneName: autoZone,
                     }))
-                    setStatusMessage('Outpost position marked. Fill details in the right sidebar and save.')
+                    setStatusMessage(`Outpost position marked in ${autoZone}. Fill details in the right sidebar and save.`)
                   } else {
+                    const sessionZone = getAuthSession()?.assignedZone;
+                    if (sessionZone) {
+                      const autoZone = getAutoZone(nextPoint[0], nextPoint[1]);
+                      if (autoZone !== sessionZone) {
+                        setStatusMessage(`⚠️ Action Denied: You are only authorized to deploy sensors in ${sessionZone}. You clicked ${autoZone}.`);
+                        return;
+                      }
+                    }
                     setSensorForm((previous) => ({
                       ...previous,
                       latitude: nextPoint[0],
@@ -942,81 +961,31 @@ function AddOutpostForm({
         {/* Divider */}
         <div className="border-t border-slate-200 pt-3 dark:border-slate-700" />
 
-        {/* Employees Section */}
+        {/* Employee Credentials Section */}
         <div>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Employees ({employees.length})</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowEmployeeForm(!showEmployeeForm)}
-              className="rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
-            >
-              {showEmployeeForm ? '✕' : '➕'} Add Employee
-            </button>
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-2">Employee Credentials</p>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="space-y-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+              <span className="block uppercase tracking-wider">Username</span>
+              <input
+                type="text"
+                value={outpostForm.employeeUsername || ''}
+                onChange={(event) => setOutpostForm((previous: AdminOutpostRequest) => ({ ...previous, employeeUsername: event.target.value }))}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                placeholder="EMP-001"
+              />
+            </label>
+            <label className="space-y-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+              <span className="block uppercase tracking-wider">Password</span>
+              <input
+                type="password"
+                value={outpostForm.employeePassword || ''}
+                onChange={(event) => setOutpostForm((previous: AdminOutpostRequest) => ({ ...previous, employeePassword: event.target.value }))}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                placeholder="••••••••"
+              />
+            </label>
           </div>
-
-          {showEmployeeForm && (
-            <div className="mt-2 space-y-2 rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 dark:border-emerald-800/30 dark:bg-emerald-950/20">
-              <input
-                type="text"
-                placeholder="Employee name"
-                value={newEmployee.name}
-                onChange={(e) => setNewEmployee((prev: EmployeeRecord) => ({ ...prev, name: e.target.value }))}
-                className="w-full rounded-lg border border-emerald-200 bg-white px-2 py-1.5 text-xs text-slate-900 dark:border-emerald-700 dark:bg-slate-800 dark:text-white"
-              />
-              <input
-                type="email"
-                placeholder="Email ID"
-                value={newEmployee.email}
-                onChange={(e) => setNewEmployee((prev: EmployeeRecord) => ({ ...prev, email: e.target.value }))}
-                className="w-full rounded-lg border border-emerald-200 bg-white px-2 py-1.5 text-xs text-slate-900 dark:border-emerald-700 dark:bg-slate-800 dark:text-white"
-              />
-              <input
-                type="text"
-                placeholder="Employee ID"
-                value={newEmployee.employeeId}
-                onChange={(e) => setNewEmployee((prev: EmployeeRecord) => ({ ...prev, employeeId: e.target.value }))}
-                className="w-full rounded-lg border border-emerald-200 bg-white px-2 py-1.5 text-xs text-slate-900 dark:border-emerald-700 dark:bg-slate-800 dark:text-white"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  if (newEmployee.name && newEmployee.email && newEmployee.employeeId) {
-                    setEmployees((prev: EmployeeRecord[]) => [...prev, { ...newEmployee, id: Date.now().toString() }])
-                    setNewEmployee({ id: '', name: '', email: '', employeeId: '' })
-                    setShowEmployeeForm(false)
-                  }
-                }}
-                disabled={!newEmployee.name || !newEmployee.email || !newEmployee.employeeId}
-                className="w-full rounded-lg bg-emerald-600 px-2 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50 dark:bg-emerald-700 dark:hover:bg-emerald-600"
-              >
-                Add Employee
-              </button>
-            </div>
-          )}
-
-          {employees.length > 0 && (
-            <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
-              {employees.map((emp) => (
-                <div key={emp.id} className="flex items-start justify-between rounded-lg bg-slate-100 px-2 py-1.5 text-xs dark:bg-slate-800">
-                  <div className="flex-1">
-                    <p className="font-semibold text-slate-900 dark:text-white">{emp.name}</p>
-                    <p className="text-slate-500 dark:text-slate-400">{emp.email}</p>
-                    <p className="text-slate-500 dark:text-slate-400">ID: {emp.employeeId}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setEmployees((prev: EmployeeRecord[]) => prev.filter((e: EmployeeRecord) => e.id !== emp.id))}
-                    className="ml-2 text-slate-400 hover:text-rose-600 dark:text-slate-500 dark:hover:text-rose-400"
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
         {/* Divider */}
@@ -1172,6 +1141,16 @@ function AddSensorForm({
   savingSensor: boolean
   saveSensor: () => void
 }) {
+  const session = getAuthSession();
+  const isEmployee = session?.role === 'EMPLOYEE';
+  const assignedZone = session?.assignedZone;
+
+  useEffect(() => {
+    if (isEmployee && assignedZone && sensorForm.zoneName !== assignedZone) {
+      setSensorForm((prev) => ({ ...prev, zoneName: assignedZone }));
+    }
+  }, [isEmployee, assignedZone, sensorForm.zoneName, setSensorForm]);
+
   return (
     <div className="rounded-2xl border border-slate-200/70 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/40">
       <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-emerald-700 dark:text-emerald-400">Add sensor from map</p>
@@ -1182,7 +1161,8 @@ function AddSensorForm({
           <select
             value={sensorForm.zoneName}
             onChange={(event) => setSensorForm((previous: AdminSensorRequest) => ({ ...previous, zoneName: event.target.value }))}
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+            disabled={isEmployee && !!assignedZone}
+            className={`w-full rounded-xl border px-3 py-2 text-sm ${isEmployee ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'border-slate-200 bg-white text-slate-900'} dark:border-slate-700 dark:bg-slate-900 dark:text-white`}
           >
             <option value="">Select zone</option>
             {displayZones.map((zone) => (
