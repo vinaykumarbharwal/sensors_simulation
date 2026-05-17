@@ -46,6 +46,7 @@ export function AlertsPanel({ activeAlerts, alertsHistory, zones = [] }: AlertsP
             const styles = alertLevelStyles(alert.alertLevel)
             const zone = zoneLookup.get(alert.zone)
             const responsePlan = zone?.responsePlan
+            const outpostName = zone?.outpost?.outpostName
             const isExpanded = expandedAlertId === alert.alertId
 
             return (
@@ -63,7 +64,7 @@ export function AlertsPanel({ activeAlerts, alertsHistory, zones = [] }: AlertsP
                     {alert.alertLevel === 'CRITICAL' && <div className="pulse-dot bg-status-critical" />}
                     <div>
                       <p className="text-xs font-bold" style={{ color: styles.text }}>
-                        {alert.zone} • {alert.alertLevel}
+                        {alert.zone} {outpostName ? `(${outpostName})` : ''} • {alert.alertLevel}
                       </p>
                       <p className="text-xs opacity-80" style={{ color: styles.text }}>
                         {normalizeAlertMessage(alert.message)}
@@ -98,20 +99,26 @@ export function AlertsPanel({ activeAlerts, alertsHistory, zones = [] }: AlertsP
       <div className="mt-8">
         <p className="heading-caps mb-4">Historical Log</p>
         <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-          {recent.map((alert) => (
-            <div key={`${alert.alertId}-${alert.timestamp}`} className="flex items-center justify-between p-3 rounded-lg border border-border-subtle bg-bg-canvas/50">
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-text-primary truncate">{alert.zone}</p>
-                <p className="text-[10px] text-text-muted text-mono">{new Date(alert.timestamp).toLocaleTimeString()}</p>
+          {recent.map((alert) => {
+            const zone = zoneLookup.get(alert.zone)
+            const outpostName = zone?.outpost?.outpostName
+            return (
+              <div key={`${alert.alertId}-${alert.timestamp}`} className="flex items-center justify-between p-3 rounded-lg border border-border-subtle bg-bg-canvas/50">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-text-primary truncate">
+                    {alert.zone} {outpostName ? `(${outpostName})` : ''}
+                  </p>
+                  <p className="text-[10px] text-text-muted text-mono">{new Date(alert.timestamp).toLocaleTimeString()}</p>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${alert.resolved ? 'bg-status-safe/10 text-status-safe' : 'bg-status-critical/10 text-status-critical'}`}>
+                    {alert.resolved ? 'Resolved' : 'Active'}
+                  </span>
+                  <span className="text-xs font-bold text-text-secondary text-mono">{alert.fireChancePercent}%</span>
+                </div>
               </div>
-              <div className="flex items-center gap-3 shrink-0">
-                <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${alert.resolved ? 'bg-status-safe/10 text-status-safe' : 'bg-status-critical/10 text-status-critical'}`}>
-                  {alert.resolved ? 'Resolved' : 'Active'}
-                </span>
-                <span className="text-xs font-bold text-text-secondary text-mono">{alert.fireChancePercent}%</span>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
     </section>

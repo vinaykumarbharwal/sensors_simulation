@@ -90,15 +90,35 @@ function Dashboard({ session, onSessionUpdate, onLogout }: DashboardProps) {
 
   useEffect(() => {
     if (!map?.zones?.length) return
-    setSelectedZone((previous) =>
-      previous && map.zones.some((z) => z.zoneName === previous.zoneName)
-        ? previous
-        : map.zones.find((z) => z.hasActiveAlert) ?? map.zones[0] ?? null
-    )
-  }, [map])
+    
+    const isEmployee = session.role.toUpperCase() === 'EMPLOYEE'
+    const assignedZoneName = session.assignedZone
+
+    setSelectedZone((previous) => {
+      // If we already have a valid selection, keep it
+      if (previous && map.zones.some((z) => z.zoneName === previous.zoneName)) {
+        // Enforce employee restriction even if they somehow got another zone selected
+        if (isEmployee && assignedZoneName && previous.zoneName !== assignedZoneName) {
+           return map.zones.find((z) => z.zoneName === assignedZoneName) ?? previous
+        }
+        return previous
+      }
+      
+      // Default selection logic
+      if (isEmployee && assignedZoneName) {
+        return map.zones.find((z) => z.zoneName === assignedZoneName) ?? null
+      }
+      return map.zones.find((z) => z.hasActiveAlert) ?? map.zones[0] ?? null
+    })
+  }, [map, session])
 
   const syncTimestamp = lastUpdated ?? dashboard?.timestamp ?? map?.generatedAt ?? null
-  const selectedZoneSummary = selectedZone ?? map?.zones?.find((zone) => zone.hasActiveAlert) ?? map?.zones?.[0] ?? null
+  const employeeAssignedZone = session.role.toUpperCase() === 'EMPLOYEE' ? session.assignedZone : null
+  const selectedZoneSummary = selectedZone ?? (
+    employeeAssignedZone 
+      ? map?.zones?.find((zone) => zone.zoneName === employeeAssignedZone) 
+      : (map?.zones?.find((zone) => zone.hasActiveAlert) ?? map?.zones?.[0])
+  ) ?? null
   const activePageMeta = pageDefinitions.find((page) => page.id === activePage) ?? pageDefinitions[0]
 
   if (loading || authExpired) return <LoadingState />
@@ -244,7 +264,15 @@ function Dashboard({ session, onSessionUpdate, onLogout }: DashboardProps) {
                   <HealthPanel health={health} />
                   <SensorReadingsPanel readings={readingsHistory} />
                 </div>
-                {selectedZoneSummary && <ZoneSummaryCard zone={selectedZoneSummary} />}
+                <div className="flex flex-col gap-6 h-full max-h-[85vh] overflow-y-auto pr-2 custom-scrollbar">
+                  {session.role.toUpperCase() === 'HEAD' ? (
+                    (map?.zones ?? []).map((zone) => (
+                      <ZoneSummaryCard key={zone.zoneName} zone={zone} />
+                    ))
+                  ) : (
+                    selectedZoneSummary && <ZoneSummaryCard zone={selectedZoneSummary} />
+                  )}
+                </div>
               </div>
             )}
 

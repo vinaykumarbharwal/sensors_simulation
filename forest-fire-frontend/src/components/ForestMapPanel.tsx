@@ -11,18 +11,6 @@ interface ForestMapPanelProps {
   role: string
 }
 
-interface EmployeeRecord {
-  id: string
-  name: string
-  email: string
-  employeeId: string
-}
-
-interface OutpostSensorRecord {
-  id: string
-  sensorType: 'THERMAL' | 'SMOKE' | 'HUMIDITY'
-  sensorName: string
-}
 
 type LayerKey = 'sensors' | 'outposts' | 'coverage' | 'impact'
 type MapPoint = [number, number]
@@ -225,6 +213,8 @@ export function ForestMapPanel({ snapshot, onZoneSelect, role }: ForestMapPanelP
   const normalizedRole = role.toUpperCase()
   const isEmployee = normalizedRole === 'EMPLOYEE'
   const isHead = normalizedRole === 'HEAD'
+  const session = getAuthSession()
+  const employeeAssignedZoneName = session?.assignedZone
 
   const [visibleLayers, setVisibleLayers] = useState<Record<LayerKey, boolean>>({
     sensors: true,
@@ -238,12 +228,6 @@ export function ForestMapPanel({ snapshot, onZoneSelect, role }: ForestMapPanelP
   const [placementPoint, setPlacementPoint] = useState<MapPoint | null>(null)
   const [selectedZoneName, setSelectedZoneName] = useState('')
   const [addOutpostMode, setAddOutpostMode] = useState(false)
-  const [showEmployeeForm, setShowEmployeeForm] = useState(false)
-  const [showSensorForm, setShowSensorForm] = useState(false)
-  const [employees, setEmployees] = useState<EmployeeRecord[]>([])
-  const [sensors, setSensors] = useState<OutpostSensorRecord[]>([])
-  const [newEmployee, setNewEmployee] = useState<EmployeeRecord>({ id: '', name: '', email: '', employeeId: '' })
-  const [newSensor, setNewSensor] = useState<OutpostSensorRecord>({ id: '', sensorType: 'THERMAL', sensorName: '' })
   const [outpostForm, setOutpostForm] = useState<AdminOutpostRequest>({
     outpostName: '',
     zoneName: '',
@@ -271,7 +255,11 @@ export function ForestMapPanel({ snapshot, onZoneSelect, role }: ForestMapPanelP
     ?? zones.slice().sort((left, right) => right.fireChancePercent - left.fireChancePercent)[0]
   const focusedZone = activeZone ?? zones[0] ?? null
 
-  const employeePrimaryOutpost = focusedZone?.outpost ?? outposts[0] ?? null
+  const employeeAssignedZone = useMemo(() => {
+    return zones.find(z => z.zoneName === employeeAssignedZoneName) ?? null
+  }, [zones, employeeAssignedZoneName])
+
+  const employeePrimaryOutpost = employeeAssignedZone?.outpost ?? outposts[0] ?? null
   const employeeNearbyOutposts = useMemo(() => {
     if (!employeePrimaryOutpost) {
       return []
@@ -298,12 +286,7 @@ export function ForestMapPanel({ snapshot, onZoneSelect, role }: ForestMapPanelP
 
   const displayZones = useMemo(() => {
     if (isEmployee) {
-      const outpostIds = new Set(employeeNearbyOutposts.map((outpost) => outpost.outpostId))
-      const regionalZones = zones.filter((zone) => (zone.outpost ? outpostIds.has(zone.outpost.outpostId) : false))
-      if (regionalZones.length > 0) {
-        return regionalZones
-      }
-      return focusedZone ? [focusedZone] : []
+      return employeeAssignedZone ? [employeeAssignedZone] : []
     }
 
     if (isHead && headMapMode === 'focused') {
@@ -311,7 +294,7 @@ export function ForestMapPanel({ snapshot, onZoneSelect, role }: ForestMapPanelP
     }
 
     return zones
-  }, [employeeNearbyOutposts, focusedZone, headFocusedZones, headMapMode, isEmployee, isHead, zones])
+  }, [employeeAssignedZone, headFocusedZones, headMapMode, isEmployee, isHead, zones])
 
   const displayOutposts = useMemo(() => {
     if (isEmployee) {
@@ -338,16 +321,30 @@ export function ForestMapPanel({ snapshot, onZoneSelect, role }: ForestMapPanelP
 
   const alertZones = useMemo(() => {
     return displayZones
-      .filter((zone) => zone.hasActiveAlert || (zone.sensors ?? []).some((sensor) => sensor.status === 'DANGER' || sensor.status === 'CRITICAL'))
+      .filter((zone) => {
+        if (isEmployee && employeeAssignedZoneName && zone.zoneName !== employeeAssignedZoneName) {
+          return false
+        }
+        return zone.hasActiveAlert || (zone.sensors ?? []).some((sensor) => sensor.status === 'DANGER' || sensor.status === 'CRITICAL')
+      })
       .sort((left, right) => right.fireChancePercent - left.fireChancePercent)
-  }, [displayZones])
+  }, [displayZones, isEmployee, employeeAssignedZoneName])
 
-  const primaryAlertZone = alertZones[0] ?? null
+  const primaryAlertZone = alertZones[0]
 
   useEffect(() => {
-    const initialZone = selectedZoneName
-      ? zones.find((zone) => zone.zoneName === selectedZoneName)
-      : activeZone ?? zones[0]
+    const isEmployee = session?.role?.toUpperCase() === 'EMPLOYEE'
+    const assignedZoneName = session?.assignedZone
+
+    let initialZone = selectedZoneName ? zones.find((zone) => zone.zoneName === selectedZoneName) : null
+
+    if (!initialZone) {
+      if (isEmployee && assignedZoneName) {
+        initialZone = zones.find((z) => z.zoneName === assignedZoneName)
+      } else {
+        initialZone = activeZone ?? zones[0]
+      }
+    }
 
     if (!initialZone) {
       return
@@ -367,7 +364,7 @@ export function ForestMapPanel({ snapshot, onZoneSelect, role }: ForestMapPanelP
       latitude: placementPoint ? placementPoint[0] : initialZone.latitude,
       longitude: placementPoint ? placementPoint[1] : initialZone.longitude,
     }))
-  }, [activeZone, placementPoint, selectedZoneName, zones])
+  }, [zones, activeZone, selectedZoneName, session, placementPoint])
 
   const selectedZone = zones.find((zone) => zone.zoneName === selectedZoneName) ?? activeZone ?? null
 
@@ -427,6 +424,8 @@ export function ForestMapPanel({ snapshot, onZoneSelect, role }: ForestMapPanelP
     )
   }
 
+  const showSidebar = isEmployee || addOutpostMode || statusMessage !== null
+
   return (
     <section className="card overflow-hidden rounded-2xl">
       <div className="border-b border-slate-200/70 px-4 py-3 dark:border-slate-800/80 sm:px-6">
@@ -436,7 +435,7 @@ export function ForestMapPanel({ snapshot, onZoneSelect, role }: ForestMapPanelP
         <h2 className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">Operations Map</h2>
       </div>
 
-      <div className="grid gap-0 lg:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.9fr)]">
+      <div className={showSidebar ? "grid gap-0 lg:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.9fr)]" : "block"}>
         <div className="relative min-h-[430px] bg-slate-100 dark:bg-slate-950 sm:min-h-[520px]">
           <MapContainer
             center={displayZones[0] ? [displayZones[0].latitude, displayZones[0].longitude] : [22.5, 79.5]}
@@ -447,12 +446,13 @@ export function ForestMapPanel({ snapshot, onZoneSelect, role }: ForestMapPanelP
             preferCanvas
           >
             <MapViewportController points={mapPoints} />
-            {(isEmployee || (isHead && addOutpostMode)) && (
+            {(isEmployee || isHead) && (
               <MapPlacementController
                 enabled
                 onPick={(nextPoint) => {
                   setPlacementPoint(nextPoint)
                   if (isHead) {
+                    setAddOutpostMode(true)
                     const autoZone = getAutoZone(nextPoint[0], nextPoint[1]);
                     setSelectedZoneName(autoZone);
                     setOutpostForm((previous) => ({
@@ -731,102 +731,55 @@ export function ForestMapPanel({ snapshot, onZoneSelect, role }: ForestMapPanelP
           </div>
         </div>
 
-        <aside className="border-t border-slate-200/70 bg-slate-50/70 p-4 dark:border-slate-800/80 dark:bg-slate-900/60 lg:border-l lg:border-t-0 lg:p-5 overflow-y-auto max-h-[520px]">
-          <div className="space-y-4">
-            {statusMessage && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300">
-                {statusMessage}
-              </div>
-            )}
-
-            {!addOutpostMode && primaryAlertZone && (
-              <div className="rounded-2xl border border-rose-200/80 bg-white p-4 shadow-sm dark:border-rose-800/50 dark:bg-slate-950/40">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-rose-600 dark:text-rose-400">Response To Alert</p>
-                    <p className="mt-1 text-sm font-black text-slate-900 dark:text-white">{primaryAlertZone.zoneName}</p>
-                  </div>
+        {showSidebar && (
+          <aside className="border-t border-slate-200/70 bg-slate-50/70 p-4 dark:border-slate-800/80 dark:bg-slate-900/60 lg:border-l lg:border-t-0 lg:p-5 overflow-y-auto max-h-[520px]">
+            <div className="space-y-4">
+              {statusMessage && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300">
+                  {statusMessage}
                 </div>
-                <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-                  {primaryAlertZone.responsePlan?.summary ??
-                    'Alert detected from sensor stream. Dispatch nearest crew and keep UAV support on standby.'}
-                </p>
-                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                  <InfoCard label="Status" value={primaryAlertZone.overallStatus} />
-                  <InfoCard label="Fire Chance" value={`${primaryAlertZone.fireChancePercent}%`} />
-                  <InfoCard label="Sensors" value={`${(primaryAlertZone.sensors ?? []).length}`} />
-                  <InfoCard
-                    label="Assets"
-                    value={
-                      primaryAlertZone.responsePlan
-                        ? `${primaryAlertZone.responsePlan.manpowerRequired} crew / ${primaryAlertZone.responsePlan.uavCount} UAV`
-                        : 'Dispatch needed'
-                    }
-                  />
+              )}
+
+              {isEmployee && employeeAssignedZone && (
+                <div className="rounded-2xl border border-emerald-200/70 bg-emerald-50/70 p-4 dark:border-emerald-800/50 dark:bg-emerald-950/25">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-emerald-700 dark:text-emerald-400">Employee coverage scope</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{employeeAssignedZone.zoneName}</p>
+                  <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                    {employeeAssignedZone.responsePlan?.summary ??
+                      'Operational map includes your outpost and nearest 2-3 outposts for field coordination.'}
+                  </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onZoneSelect(primaryAlertZone)}
-                  className="mt-3 w-full rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-rose-700"
-                >
-                  Open Alert Zone
-                </button>
-              </div>
-            )}
+              )}
 
-            {isEmployee && displayZones[0] && (
-              <div className="rounded-2xl border border-emerald-200/70 bg-emerald-50/70 p-4 dark:border-emerald-800/50 dark:bg-emerald-950/25">
-                <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-emerald-700 dark:text-emerald-400">Employee coverage scope</p>
-                <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{displayZones[0].zoneName}</p>
-                <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                  {displayZones[0].responsePlan?.summary ??
-                    'Operational map includes your outpost and nearest 2-3 outposts for field coordination.'}
-                </p>
-              </div>
-            )}
+              {isHead && addOutpostMode && (
+                <AddOutpostForm
+                  zones={zones}
+                  selectedZoneName={selectedZoneName}
+                  setSelectedZoneName={setSelectedZoneName}
+                  outpostForm={outpostForm}
+                  setOutpostForm={setOutpostForm}
+                  placementPoint={placementPoint}
+                  savingOutpost={savingOutpost}
+                  saveOutpost={saveOutpost}
+                  onCancel={() => {
+                    setAddOutpostMode(false)
+                    setPlacementPoint(null)
+                  }}
+                />
+              )}
 
-            {isHead && addOutpostMode && (
-              <AddOutpostForm
-                zones={zones}
-                selectedZoneName={selectedZoneName}
-                setSelectedZoneName={setSelectedZoneName}
-                outpostForm={outpostForm}
-                setOutpostForm={setOutpostForm}
-                placementPoint={placementPoint}
-                employees={employees}
-                setEmployees={setEmployees}
-                showEmployeeForm={showEmployeeForm}
-                setShowEmployeeForm={setShowEmployeeForm}
-                newEmployee={newEmployee}
-                setNewEmployee={setNewEmployee}
-                sensors={sensors}
-                setSensors={setSensors}
-                showSensorForm={showSensorForm}
-                setShowSensorForm={setShowSensorForm}
-                newSensor={newSensor}
-                setNewSensor={setNewSensor}
-                savingOutpost={savingOutpost}
-                saveOutpost={saveOutpost}
-                onCancel={() => {
-                  setAddOutpostMode(false)
-                  setPlacementPoint(null)
-                  setEmployees([])
-                  setSensors([])
-                }}
-              />
-            )}
-
-            {isEmployee && (
-              <AddSensorForm
-                displayZones={displayZones}
-                sensorForm={sensorForm}
-                setSensorForm={setSensorForm}
-                savingSensor={savingSensor}
-                saveSensor={saveSensor}
-              />
-            )}
-          </div>
-        </aside>
+              {isEmployee && (
+                <AddSensorForm
+                  displayZones={displayZones}
+                  sensorForm={sensorForm}
+                  setSensorForm={setSensorForm}
+                  savingSensor={savingSensor}
+                  saveSensor={saveSensor}
+                />
+              )}
+            </div>
+          </aside>
+        )}
       </div>
     </section>
   )
@@ -861,18 +814,6 @@ function AddOutpostForm({
   outpostForm: AdminOutpostRequest
   setOutpostForm: React.Dispatch<React.SetStateAction<AdminOutpostRequest>>
   placementPoint: MapPoint | null
-  employees: EmployeeRecord[]
-  setEmployees: React.Dispatch<React.SetStateAction<EmployeeRecord[]>>
-  showEmployeeForm: boolean
-  setShowEmployeeForm: React.Dispatch<React.SetStateAction<boolean>>
-  newEmployee: EmployeeRecord
-  setNewEmployee: React.Dispatch<React.SetStateAction<EmployeeRecord>>
-  sensors: OutpostSensorRecord[]
-  setSensors: React.Dispatch<React.SetStateAction<OutpostSensorRecord[]>>
-  showSensorForm: boolean
-  setShowSensorForm: React.Dispatch<React.SetStateAction<boolean>>
-  newSensor: OutpostSensorRecord
-  setNewSensor: React.Dispatch<React.SetStateAction<OutpostSensorRecord>>
   savingOutpost: boolean
   saveOutpost: () => void
   onCancel: () => void
@@ -897,26 +838,15 @@ function AddOutpostForm({
       <div className="space-y-3 border-t border-slate-200 pt-3 dark:border-slate-700">
         {/* Zone Selection */}
         <label className="space-y-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
-          <span className="block uppercase tracking-wider">Zone</span>
+          <span className="block uppercase tracking-wider">Zone (Auto-Detected)</span>
           <select
             value={selectedZoneName}
-            onChange={(event) => {
-              const nextZoneName = event.target.value
-              setSelectedZoneName(nextZoneName)
-              const nextZone = zones.find((zone) => zone.zoneName === nextZoneName)
-              if (nextZone) {
-                setOutpostForm((previous: AdminOutpostRequest) => ({
-                  ...previous,
-                  zoneName: nextZone.zoneName,
-                  outpostName: previous.outpostName || `${nextZone.zoneName} Outpost`,
-                  latitude: placementPoint ? placementPoint[0] : nextZone.latitude,
-                  longitude: placementPoint ? placementPoint[1] : nextZone.longitude,
-                }))
-              }
-            }}
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+            disabled
+            className="w-full rounded-xl border border-slate-300 bg-slate-50/50 p-2.5 text-sm font-semibold text-slate-900 transition focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
           >
-            <option value="">Select zone</option>
+            <option value="" disabled>
+              Select zone
+            </option>
             {zones.map((zone) => (
               <option key={zone.zoneName} value={zone.zoneName}>
                 {zone.zoneName}
@@ -988,79 +918,6 @@ function AddOutpostForm({
           </div>
         </div>
 
-        {/* Divider */}
-        <div className="border-t border-slate-200 dark:border-slate-700" />
-
-        {/* Sensors Section */}
-        <div>
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Sensors ({sensors.length})</p>
-            <button
-              type="button"
-              onClick={() => setShowSensorForm(!showSensorForm)}
-              className="rounded-lg border border-blue-300 bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-700 hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-950/50 dark:text-blue-300"
-            >
-              {showSensorForm ? '✕' : '➕'} Add Sensor
-            </button>
-          </div>
-
-          {showSensorForm && (
-            <div className="mt-2 space-y-2 rounded-lg border border-blue-200 bg-blue-50/50 p-3 dark:border-blue-800/30 dark:bg-blue-950/20">
-              <select
-                value={newSensor.sensorType}
-                onChange={(e) => setNewSensor((prev: OutpostSensorRecord) => ({ ...prev, sensorType: e.target.value as any }))}
-                className="w-full rounded-lg border border-blue-200 bg-white px-2 py-1.5 text-xs text-slate-900 dark:border-blue-700 dark:bg-slate-800 dark:text-white"
-              >
-                <option value="THERMAL">🌡️ Thermal</option>
-                <option value="SMOKE">💨 Smoke</option>
-                <option value="HUMIDITY">💧 Humidity</option>
-              </select>
-              <input
-                type="text"
-                placeholder="Sensor name/model"
-                value={newSensor.sensorName}
-                onChange={(e) => setNewSensor((prev: OutpostSensorRecord) => ({ ...prev, sensorName: e.target.value }))}
-                className="w-full rounded-lg border border-blue-200 bg-white px-2 py-1.5 text-xs text-slate-900 dark:border-blue-700 dark:bg-slate-800 dark:text-white"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  if (newSensor.sensorName) {
-                    setSensors((prev: OutpostSensorRecord[]) => [...prev, { ...newSensor, id: Date.now().toString() }])
-                    setNewSensor({ id: '', sensorType: 'THERMAL', sensorName: '' })
-                    setShowSensorForm(false)
-                  }
-                }}
-                disabled={!newSensor.sensorName}
-                className="w-full rounded-lg bg-blue-600 px-2 py-1.5 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50 dark:bg-blue-700 dark:hover:bg-blue-600"
-              >
-                Add Sensor
-              </button>
-            </div>
-          )}
-
-          {sensors.length > 0 && (
-            <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
-              {sensors.map((sensor) => (
-                <div key={sensor.id} className="flex items-center justify-between rounded-lg bg-slate-100 px-2 py-1.5 text-xs dark:bg-slate-800">
-                  <p className="font-semibold text-slate-900 dark:text-white">
-                    {sensorIcons[sensor.sensorType]} {sensor.sensorName}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setSensors((prev: OutpostSensorRecord[]) => prev.filter((s: OutpostSensorRecord) => s.id !== sensor.id))}
-                    className="text-slate-400 hover:text-rose-600 dark:text-slate-500 dark:hover:text-rose-400"
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Divider */}
-        <div className="border-t border-slate-200 dark:border-slate-700" />
 
         {/* Other Details */}
         <div className="grid grid-cols-2 gap-2">

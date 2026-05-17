@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { SensorReading } from '../types/api'
 import { ExportButton } from './ExportButton'
+import { getAuthSession } from '../api/client'
 
 interface SensorReadingsPanelProps {
   readings: SensorReading[]
@@ -49,6 +50,9 @@ function Sparkline({ data, color }: { data: number[]; color: string }) {
 export function SensorReadingsPanel({ readings }: SensorReadingsPanelProps) {
   const [sensorTypeFilter, setSensorTypeFilter] = useState<'ALL' | 'THERMAL' | 'SMOKE' | 'HUMIDITY'>('ALL')
   const [zoneQuery, setZoneQuery] = useState('')
+  const session = getAuthSession()
+  const isEmployee = session?.role.toUpperCase() === 'EMPLOYEE'
+  const assignedZone = session?.assignedZone
 
   // Group readings by sensorId to get historical trends
   const sensorTrends = useMemo(() => {
@@ -66,9 +70,14 @@ export function SensorReadingsPanel({ readings }: SensorReadingsPanelProps) {
   const filtered = useMemo(() => {
     return readings
       .filter((r) => sensorTypeFilter === 'ALL' || r.sensorType === sensorTypeFilter)
-      .filter((r) => r.zone.toLowerCase().includes(zoneQuery.trim().toLowerCase()))
+      .filter((r) => {
+        if (isEmployee && assignedZone) {
+          return r.zone === assignedZone
+        }
+        return r.zone.toLowerCase().includes(zoneQuery.trim().toLowerCase())
+      })
       .slice(0, 30)
-  }, [readings, sensorTypeFilter, zoneQuery])
+  }, [readings, sensorTypeFilter, zoneQuery, isEmployee, assignedZone])
 
   return (
     <section className="zone-card">
@@ -99,13 +108,15 @@ export function SensorReadingsPanel({ readings }: SensorReadingsPanelProps) {
             </button>
           ))}
         </div>
-        <input
-          type="search"
-          placeholder="Filter zone..."
-          value={zoneQuery}
-          onChange={(e) => setZoneQuery(e.target.value)}
-          className="flex-1 rounded-lg border border-border-subtle bg-white px-3 py-1.5 text-sm text-text-primary placeholder:text-text-muted outline-none focus:border-accent-primary transition-all sm:max-w-[200px]"
-        />
+        {!isEmployee && (
+          <input
+            type="search"
+            placeholder="Filter zone..."
+            value={zoneQuery}
+            onChange={(e) => setZoneQuery(e.target.value)}
+            className="flex-1 rounded-lg border border-border-subtle bg-white px-3 py-1.5 text-sm text-text-primary placeholder:text-text-muted outline-none focus:border-accent-primary transition-all sm:max-w-[200px]"
+          />
+        )}
       </div>
 
       {/* Table */}

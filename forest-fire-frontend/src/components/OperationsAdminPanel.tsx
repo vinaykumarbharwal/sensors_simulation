@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { apiClient } from '../api/client'
+import { apiClient, getAuthSession } from '../api/client'
 import type { AdminOutpostRequest, AdminSensorRequest, EquipmentUsageRequest, MapSnapshot, ZoneData } from '../types/api'
 
 interface OperationsAdminPanelProps {
@@ -30,13 +30,23 @@ export function OperationsAdminPanel({ snapshot, userRole }: OperationsAdminPane
   const [equipmentCsv, setEquipmentCsv] = useState('Fire Suit, Water Tanker, Thermal Drone')
   const [editingOutpostId, setEditingOutpostId] = useState<string | null>(null)
 
+  const session = getAuthSession()
+  const employeeAssignedZone = session?.assignedZone
+
+  const initialZone = useMemo(() => {
+    if (isEmployee && employeeAssignedZone) {
+      return zones.find((z) => z.zoneName === employeeAssignedZone) ?? fallbackZone
+    }
+    return fallbackZone
+  }, [isEmployee, employeeAssignedZone, zones, fallbackZone])
+
   const [sensorForm, setSensorForm] = useState<AdminSensorRequest>({
-    zoneName: fallbackZone?.zoneName ?? '',
+    zoneName: initialZone?.zoneName ?? '',
     sensorType: 'THERMAL',
     model: 'Vanrakshak Sentinel X1',
     location: 'ridge line',
-    latitude: fallbackZone?.latitude ?? 0,
-    longitude: fallbackZone?.longitude ?? 0,
+    latitude: initialZone?.latitude ?? 0,
+    longitude: initialZone?.longitude ?? 0,
     coverageRadiusKm: 6.5,
   })
 
@@ -180,8 +190,8 @@ export function OperationsAdminPanel({ snapshot, userRole }: OperationsAdminPane
       <div className="mt-5 grid gap-3">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-text-secondary dark:text-slate-400">Outpost directory</p>
-            <h3 className="text-base font-bold text-text-primary dark:text-white">All saved outposts</h3>
+            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-text-secondary dark:text-slate-400">Zone Directory</p>
+            <h3 className="text-base font-bold text-text-primary dark:text-white">All zones and outposts</h3>
           </div>
           {isHead && (
             <button
@@ -194,51 +204,100 @@ export function OperationsAdminPanel({ snapshot, userRole }: OperationsAdminPane
           )}
         </div>
 
-        <div className="grid gap-3 lg:grid-cols-2">
-          {outposts.map((outpost) => (
-            <article key={outpost.outpostId} className="rounded-2xl border border-border-subtle bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-emerald-600 dark:text-emerald-400">{outpost.zone}</p>
-                  <h4 className="mt-1 text-lg font-bold text-text-primary dark:text-white">{outpost.outpostName}</h4>
-                  <p className="text-sm text-text-secondary dark:text-slate-400">{outpost.outpostId}</p>
+        <div className="grid gap-4 lg:grid-cols-2">
+          {zones.map((zone) => {
+            const outpost = zone.outpost
+            const sensors = zone.sensors ?? []
+
+            return (
+              <article key={zone.zoneName} className="rounded-2xl border border-border-subtle bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-lg font-bold text-text-primary dark:text-white">{zone.zoneName}</h4>
+                    {outpost ? (
+                      <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                        Outpost: {outpost.outpostName} ({outpost.outpostId})
+                      </p>
+                    ) : (
+                      <p className="text-sm text-amber-600 dark:text-amber-400">No outpost created yet</p>
+                    )}
+                  </div>
+                  {outpost && (
+                    <span className="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                      {outpost.employeeCount} crew
+                    </span>
+                  )}
                 </div>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                  {outpost.employeeCount} crew
-                </span>
-              </div>
 
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                <MiniStat label="Coverage" value={`${outpost.coverageRadiusKm.toFixed(1)} km`} />
-                <MiniStat label="Role" value={outpost.operationalRole} />
-                <MiniStat label="Latitude" value={outpost.latitude.toFixed(4)} />
-                <MiniStat label="Longitude" value={outpost.longitude.toFixed(4)} />
-              </div>
+                {outpost && (
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <MiniStat label="Coverage" value={`${outpost.coverageRadiusKm.toFixed(1)} km`} />
+                    <MiniStat label="Role" value={outpost.operationalRole} />
+                  </div>
+                )}
 
-              <p className="mt-3 text-sm text-slate-600 dark:text-slate-400">
-                Equipment: {outpost.availableEquipment.join(', ') || 'None assigned'}
-              </p>
-
-              {isHead && (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setEditingOutpostId(outpost.outpostId)}
-                    className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-700"
-                  >
-                    Manage
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => deleteOutpost(outpost.outpostId)}
-                    className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-950/50"
-                  >
-                    Delete
-                  </button>
+                <div className="mt-4 border-t border-border-subtle pt-3 dark:border-slate-800">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-text-secondary dark:text-slate-400 mb-2">
+                    Sensors ({sensors.length})
+                  </p>
+                  {sensors.length > 0 ? (
+                    <div className="space-y-2 max-h-32 overflow-y-auto pr-2 custom-scrollbar">
+                      {sensors.map((sensor, idx) => (
+                        <div key={idx} className="flex items-center justify-between rounded-lg bg-bg-canvas px-3 py-2 text-xs dark:bg-slate-950/40">
+                          <div>
+                            <p className="font-bold text-text-primary dark:text-white">{sensor.sensorType}</p>
+                            <p className="text-text-secondary dark:text-slate-400">{sensor.model}</p>
+                          </div>
+                          <div className="text-right">
+                            <span className="rounded bg-emerald-100 px-1.5 py-0.5 font-mono text-[9px] text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300">
+                              {sensor.createdByRole}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-500 italic">No sensors placed.</p>
+                  )}
                 </div>
-              )}
-            </article>
-          ))}
+
+                {isHead && (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {outpost ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setEditingOutpostId(outpost.outpostId)}
+                          className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-700"
+                        >
+                          Manage Outpost
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteOutpost(outpost.outpostId)}
+                          className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-950/50"
+                        >
+                          Delete
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOutpostForm(prev => ({ ...prev, zoneName: zone.zoneName }))
+                          setEditingOutpostId(null)
+                          setActiveTab('outpost')
+                        }}
+                        className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-950/50"
+                      >
+                        Create Outpost Here
+                      </button>
+                    )}
+                  </div>
+                )}
+              </article>
+            )
+          })}
         </div>
       </div>
 
@@ -252,7 +311,8 @@ export function OperationsAdminPanel({ snapshot, userRole }: OperationsAdminPane
                   <select
                     value={sensorForm.zoneName}
                     onChange={(event) => setSensorForm((previous) => ({ ...previous, zoneName: event.target.value }))}
-                    className="w-full rounded-xl border border-border-subtle bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+                    className="w-full rounded-xl border border-border-subtle bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 disabled:opacity-60 disabled:cursor-not-allowed"
+                    disabled={isEmployee}
                   >
                     {zones.map((zone) => (
                       <option key={zone.zoneName} value={zone.zoneName}>{zone.zoneName}</option>

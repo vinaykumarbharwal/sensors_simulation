@@ -90,19 +90,23 @@ public class SensorSimulationService {
         initializeSensors();
     }
 
-    @PostConstruct
+    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
     @Transactional
     public void initializeMetadataInDatabase() {
         for (ForestRiskRegionCatalog.RiskRegion region : ZONE_CATALOG) {
             ForestZoneEntity zoneEntity = forestZoneRepository.findByNameIgnoreCase(region.zoneName())
                     .orElseGet(() -> {
-                        ForestZoneEntity entity = new ForestZoneEntity();
-                        entity.setName(region.zoneName());
-                        entity.setState(region.state());
-                        entity.setDescription(region.description());
-                        entity.setLatitude(region.latitude());
-                        entity.setLongitude(region.longitude());
-                        return forestZoneRepository.save(entity);
+                        try {
+                            ForestZoneEntity entity = new ForestZoneEntity();
+                            entity.setName(region.zoneName());
+                            entity.setState(region.state());
+                            entity.setDescription(region.description());
+                            entity.setLatitude(region.latitude());
+                            entity.setLongitude(region.longitude());
+                            return forestZoneRepository.saveAndFlush(entity);
+                        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+                            return forestZoneRepository.findByNameIgnoreCase(region.zoneName()).orElseThrow();
+                        }
                     });
 
             sensors.values().stream()
@@ -700,17 +704,21 @@ public class SensorSimulationService {
     private void ensureSensorMetadata(Sensor sensor, ForestZoneEntity zoneEntity) {
         sensorRepository.findBySensorId(sensor.getSensorId())
                 .orElseGet(() -> {
-                    SensorEntity entity = new SensorEntity();
-                    entity.setSensorId(sensor.getSensorId());
-                    entity.setSensorType(sensor.getSensorType());
-                    entity.setModel(sensor.getModel());
-                    entity.setLocation(sensor.getLocation());
-                    entity.setLatitude(zoneEntity.getLatitude());
-                    entity.setLongitude(zoneEntity.getLongitude());
-                    entity.setCoverageRadiusKm(sensor.getCoverageRadiusKm());
-                    entity.setCreatedByRole("Forest Department Employee");
-                    entity.setZone(zoneEntity);
-                    return sensorRepository.save(entity);
+                    try {
+                        SensorEntity entity = new SensorEntity();
+                        entity.setSensorId(sensor.getSensorId());
+                        entity.setSensorType(sensor.getSensorType());
+                        entity.setModel(sensor.getModel());
+                        entity.setLocation(sensor.getLocation());
+                        entity.setLatitude(zoneEntity.getLatitude());
+                        entity.setLongitude(zoneEntity.getLongitude());
+                        entity.setCoverageRadiusKm(sensor.getCoverageRadiusKm());
+                        entity.setCreatedByRole("Forest Department Employee");
+                        entity.setZone(zoneEntity);
+                        return sensorRepository.saveAndFlush(entity);
+                    } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+                        return sensorRepository.findBySensorId(sensor.getSensorId()).orElseThrow();
+                    }
                 });
     }
 
