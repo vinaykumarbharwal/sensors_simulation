@@ -1,5 +1,7 @@
 package com.forestfire.service;
 
+import com.forestfire.dao.UserAccountRepository;
+import com.forestfire.entity.UserAccountEntity;
 import com.forestfire.model.AccountPasswordChangeRequest;
 import com.forestfire.model.AccountProfileResponse;
 import org.springframework.beans.factory.annotation.Value;
@@ -12,38 +14,44 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.Locale;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class UserAccountService implements UserDetailsService {
 
     private final PasswordEncoder passwordEncoder;
-    private final Map<String, AccountRecord> accounts = new ConcurrentHashMap<>();
+    private final UserAccountRepository userAccountRepository;
 
     public UserAccountService(PasswordEncoder passwordEncoder,
+                              UserAccountRepository userAccountRepository,
                               @Value("${app.security.employee.username:employee}") String employeeUsername,
                               @Value("${app.security.employee.password:employee123}") String employeePassword,
                               @Value("${app.security.head.username:head}") String headUsername,
                               @Value("${app.security.head.password:head123}") String headPassword) {
         this.passwordEncoder = passwordEncoder;
-        registerAccount(employeeUsername, employeePassword, "EMPLOYEE", defaultDisplayName(employeeUsername, "Field operator"), "Central India");
-        registerAccount(headUsername, headPassword, "HEAD", defaultDisplayName(headUsername, "District head"), null);
+        this.userAccountRepository = userAccountRepository;
+
+        // Auto-seed default accounts on start if they don't already exist in database
+        if (!userAccountRepository.existsByUsernameIgnoreCase(employeeUsername)) {
+            registerAccount(employeeUsername, employeePassword, "EMPLOYEE", defaultDisplayName(employeeUsername, "Field operator"), "Central India");
+        }
+        if (!userAccountRepository.existsByUsernameIgnoreCase(headUsername)) {
+            registerAccount(headUsername, headPassword, "HEAD", defaultDisplayName(headUsername, "District head"), null);
+        }
     }
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        AccountRecord account = getAccount(username);
+        UserAccountEntity account = getAccount(username);
         return User.builder()
-                .username(account.username())
-                .password(account.passwordHash())
-                .roles(account.role())
+                .username(account.getUsername())
+                .password(account.getPasswordHash())
+                .roles(account.getRole())
                 .build();
     }
 
     public AccountProfileResponse getProfile(String username) {
-        AccountRecord account = getAccount(username);
-        return new AccountProfileResponse(account.username(), account.displayName(), account.role());
+        UserAccountEntity account = getAccount(username);
+        return new AccountProfileResponse(account.getUsername(), account.getDisplayName(), account.getRole());
     }
 
     public AccountProfileResponse updateDisplayName(String username, String displayName) {
@@ -51,8 +59,9 @@ public class UserAccountService implements UserDetailsService {
             throw new IllegalArgumentException("displayName is required");
         }
 
-        AccountRecord account = getAccount(username);
+        UserAccountEntity account = getAccount(username);
         account.setDisplayName(displayName.trim());
+        userAccountRepository.save(account);
         return getProfile(username);
     }
 
@@ -61,33 +70,50 @@ public class UserAccountService implements UserDetailsService {
             throw new IllegalArgumentException("currentPassword and newPassword are required");
         }
 
-        AccountRecord account = getAccount(username);
-        if (!passwordEncoder.matches(request.getCurrentPassword(), account.passwordHash())) {
+        UserAccountEntity account = getAccount(username);
+        if (!passwordEncoder.matches(request.getCurrentPassword(), account.getPasswordHash())) {
             throw new IllegalArgumentException("Current password is incorrect");
         }
 
         account.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        userAccountRepository.save(account);
         return getProfile(username);
     }
 
     public String getRole(String username) {
-        return getAccount(username).role();
+        return getAccount(username).getRole();
     }
 
     public String getAssignedZone(String username) {
-        return getAccount(username).assignedZone();
+        return getAccount(username).getAssignedZone();
     }
 
     public void registerAccount(String username, String password, String role, String displayName, String assignedZone) {
-        accounts.put(normalize(username), new AccountRecord(username, passwordEncoder.encode(password), role, displayName, assignedZone));
+        // Normalize username (case-insensitive check)
+        String normalizedUsername = normalize(username);
+        if (userAccountRepository.existsByUsernameIgnoreCase(normalizedUsername)) {
+            // Update password & metadata if we are re-registering
+            UserAccountEntity existing = getAccount(normalizedUsername);
+            existing.setPasswordHash(passwordEncoder.encode(password));
+            existing.setRole(role);
+            existing.setDisplayName(displayName);
+            existing.setAssignedZone(assignedZone);
+            userAccountRepository.save(existing);
+        } else {
+            UserAccountEntity newAccount = new UserAccountEntity(
+                    username.trim(), // Keep original casing display but lookup is case-insensitive
+                    passwordEncoder.encode(password),
+                    role,
+                    displayName,
+                    assignedZone
+            );
+            userAccountRepository.save(newAccount);
+        }
     }
 
-    private AccountRecord getAccount(String username) {
-        AccountRecord account = accounts.get(normalize(username));
-        if (account == null) {
-            throw new UsernameNotFoundException("Account not found: " + username);
-        }
-        return account;
+    private UserAccountEntity getAccount(String username) {
+        return userAccountRepository.findByUsernameIgnoreCase(normalize(username))
+                .orElseThrow(() -> new UsernameNotFoundException("Account not found: " + username));
     }
 
     private String normalize(String username) {
@@ -96,49 +122,5 @@ public class UserAccountService implements UserDetailsService {
 
     private String defaultDisplayName(String username, String fallback) {
         return StringUtils.hasText(username) ? username.trim() : fallback;
-    }
-
-    private static final class AccountRecord {
-        private final String username;
-        private volatile String passwordHash;
-        private final String role;
-        private volatile String displayName;
-        private final String assignedZone;
-
-        private AccountRecord(String username, String passwordHash, String role, String displayName, String assignedZone) {
-            this.username = username;
-            this.passwordHash = passwordHash;
-            this.role = role;
-            this.displayName = displayName;
-            this.assignedZone = assignedZone;
-        }
-
-        private String username() {
-            return username;
-        }
-
-        private String passwordHash() {
-            return passwordHash;
-        }
-
-        private void setPasswordHash(String passwordHash) {
-            this.passwordHash = passwordHash;
-        }
-
-        private String role() {
-            return role;
-        }
-
-        private String displayName() {
-            return displayName;
-        }
-
-        private void setDisplayName(String displayName) {
-            this.displayName = displayName;
-        }
-
-        private String assignedZone() {
-            return assignedZone;
-        }
     }
 }

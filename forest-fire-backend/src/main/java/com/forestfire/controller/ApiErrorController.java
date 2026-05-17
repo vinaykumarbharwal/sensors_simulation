@@ -20,7 +20,10 @@ public class ApiErrorController implements ErrorController {
         HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR;
 
         if (statusAttr instanceof Integer statusCode) {
-            status = HttpStatus.resolve(statusCode) != null ? HttpStatus.resolve(statusCode) : status;
+            HttpStatus resolved = HttpStatus.resolve(statusCode);
+            if (resolved != null) {
+                status = resolved;
+            }
         }
 
         String path = (String) request.getAttribute(RequestDispatcher.ERROR_REQUEST_URI);

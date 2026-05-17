@@ -3,31 +3,31 @@
 
 :root {
   /* Colors - Terrain & Signal */
-  --bg-canvas: #F4F6F5;
+  --bg-canvas: #F8FAFC;
   --bg-surface: #FFFFFF;
-  --bg-sidebar: #1C2B22;
-  --bg-sidebar-hover: #2A3D2F;
+  --bg-sidebar: #0F172A;
+  --bg-sidebar-hover: #1E293B;
   
-  --accent-primary: #2E7D52;
-  --accent-primary-light: #EAF4EE;
-  --accent-secondary: #2563EB;
-  --accent-secondary-light: #DBEAFE;
+  --accent-primary: #059669;
+  --accent-primary-light: #ECFDF5;
+  --accent-secondary: #3B82F6;
+  --accent-secondary-light: #EFF6FF;
   
-  --status-safe: #27AE60;
-  --status-warning: #E67E22;
-  --status-critical: #E53E3E;
-  --status-inactive: #95A5A6;
+  --status-safe: #10B981;
+  --status-warning: #F59E0B;
+  --status-critical: #EF4444;
+  --status-inactive: #64748B;
   
-  --text-primary: #1A2E22;
-  --text-secondary: #5A7A65;
-  --text-muted: #9DB3A4;
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #94A3B8;
   
-  --border-subtle: #E2EAE5;
-  --border-strong: #C8D9CE;
+  --border-subtle: #E2E8F0;
+  --border-strong: #CBD5E1;
   
   /* Shadows */
-  --shadow-card: 0 1px 4px rgba(30,60,40,0.07), 0 4px 16px rgba(30,60,40,0.05);
-  --shadow-raised: 0 4px 12px rgba(30,60,40,0.12), 0 12px 32px rgba(30,60,40,0.08);
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-raised: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 
   /* Typography */
   --font-ui: 'DM Sans', sans-serif;

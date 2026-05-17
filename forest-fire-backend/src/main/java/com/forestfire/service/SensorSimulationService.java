@@ -27,7 +27,6 @@ import com.forestfire.sensor.ConfiguredSensor;
 import com.forestfire.sensor.Sensor;
 import com.forestfire.sensor.SmokeSensor;
 import com.forestfire.sensor.ThermalSensor;
-import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
