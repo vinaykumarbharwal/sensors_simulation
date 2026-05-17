@@ -22,12 +22,6 @@ const statusPalette: Record<string, { fill: string; border: string; label: strin
   CRITICAL: { fill: '#E53E3E', border: '#FEF2F2', label: 'Critical' },
 }
 
-const sensorIcons: Record<string, string> = {
-  THERMAL: '🌡️',
-  SMOKE: '💨',
-  HUMIDITY: '💧',
-}
-
 function statusTone(status: string) {
   return statusPalette[status] ?? statusPalette.SAFE
 }
@@ -319,18 +313,6 @@ export function ForestMapPanel({ snapshot, onZoneSelect, role }: ForestMapPanelP
     return points
   }, [displayOutposts, displayZones])
 
-  const alertZones = useMemo(() => {
-    return displayZones
-      .filter((zone) => {
-        if (isEmployee && employeeAssignedZoneName && zone.zoneName !== employeeAssignedZoneName) {
-          return false
-        }
-        return zone.hasActiveAlert || (zone.sensors ?? []).some((sensor) => sensor.status === 'DANGER' || sensor.status === 'CRITICAL')
-      })
-      .sort((left, right) => right.fireChancePercent - left.fireChancePercent)
-  }, [displayZones, isEmployee, employeeAssignedZoneName])
-
-  const primaryAlertZone = alertZones[0]
 
   useEffect(() => {
     const isEmployee = session?.role?.toUpperCase() === 'EMPLOYEE'
@@ -732,7 +714,6 @@ export function ForestMapPanel({ snapshot, onZoneSelect, role }: ForestMapPanelP
                 <AddOutpostForm
                   zones={zones}
                   selectedZoneName={selectedZoneName}
-                  setSelectedZoneName={setSelectedZoneName}
                   outpostForm={outpostForm}
                   setOutpostForm={setOutpostForm}
                   placementPoint={placementPoint}
@@ -765,29 +746,15 @@ export function ForestMapPanel({ snapshot, onZoneSelect, role }: ForestMapPanelP
 function AddOutpostForm({
   zones,
   selectedZoneName,
-  setSelectedZoneName,
   outpostForm,
   setOutpostForm,
   placementPoint,
-  employees,
-  setEmployees,
-  showEmployeeForm,
-  setShowEmployeeForm,
-  newEmployee,
-  setNewEmployee,
-  sensors,
-  setSensors,
-  showSensorForm,
-  setShowSensorForm,
-  newSensor,
-  setNewSensor,
   savingOutpost,
   saveOutpost,
   onCancel,
 }: {
   zones: ZoneData[]
   selectedZoneName: string
-  setSelectedZoneName: React.Dispatch<React.SetStateAction<string>>
   outpostForm: AdminOutpostRequest
   setOutpostForm: React.Dispatch<React.SetStateAction<AdminOutpostRequest>>
   placementPoint: MapPoint | null
