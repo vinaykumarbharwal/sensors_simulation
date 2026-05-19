@@ -168,6 +168,10 @@ export const apiClient = {
   getHealth: (signal?: AbortSignal) => fetchJson<HealthData>('/health', { signal }),
   createSensor: (body: AdminSensorRequest, signal?: AbortSignal) =>
     fetchJson<MapSensor>('/admin/sensors', { signal, method: 'POST', body }),
+  updateSensor: (sensorId: string, body: AdminSensorRequest, signal?: AbortSignal) =>
+    fetchJson<MapSensor>(`/admin/sensors/${encodeURIComponent(sensorId)}`, { signal, method: 'PUT', body }),
+  deleteSensor: (sensorId: string, signal?: AbortSignal) =>
+    fetchJson<void>(`/admin/sensors/${encodeURIComponent(sensorId)}`, { signal, method: 'DELETE' }),
   createOutpost: (body: AdminOutpostRequest, signal?: AbortSignal) =>
     fetchJson<MapOutpost>('/admin/outposts', { signal, method: 'POST', body }),
   useOutpostEquipment: (outpostId: string, body: EquipmentUsageRequest, signal?: AbortSignal) =>

@@ -1,34 +1,42 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { apiClient, getAuthSession } from '../api/client'
-import type { AdminOutpostRequest, AdminSensorRequest, EquipmentUsageRequest, MapSnapshot, ZoneData } from '../types/api'
+import type { AdminOutpostRequest, AdminSensorRequest, MapSnapshot, ZoneData } from '../types/api'
 
 interface OperationsAdminPanelProps {
   snapshot: MapSnapshot
   userRole: string
+  onRefresh?: () => void
 }
 
-type TabKey = 'sensor' | 'outpost' | 'equipment'
+type TabKey = 'sensor' | 'outpost'
 
 const sensorTypes = ['THERMAL', 'SMOKE', 'HUMIDITY'] as const
+
+const sensorTypeInfo: Record<string, { icon: string; color: string; label: string }> = {
+  THERMAL: { icon: '🌡️', color: '#F59E0B', label: 'Thermal' },
+  SMOKE: { icon: '💨', color: '#64748B', label: 'Smoke' },
+  HUMIDITY: { icon: '💧', color: '#059669', label: 'Humidity' },
+}
 
 function defaultZone(zones: ZoneData[]): ZoneData | null {
   return zones.slice().sort((left, right) => right.fireChancePercent - left.fireChancePercent)[0] ?? null
 }
 
-export function OperationsAdminPanel({ snapshot, userRole }: OperationsAdminPanelProps) {
+export function OperationsAdminPanel({ snapshot, userRole, onRefresh }: OperationsAdminPanelProps) {
   const zones = snapshot.zones ?? []
+  const outposts = snapshot.outposts ?? []
   const fallbackZone = useMemo(() => defaultZone(zones), [zones])
   const normalizedRole = userRole.toUpperCase()
   const isEmployee = normalizedRole === 'EMPLOYEE'
   const isHead = normalizedRole === 'HEAD'
   const initialTab: TabKey = isHead ? 'outpost' : 'sensor'
+  
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab)
   const [busy, setBusy] = useState(false)
-  const [status, setStatus] = useState<string | null>(null)
-  const outposts = snapshot.outposts ?? []
+  const [status, setStatus] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null)
+  
   const [equipmentCsv, setEquipmentCsv] = useState('Fire Suit, Water Tanker, Thermal Drone')
-  const [editingOutpostId, setEditingOutpostId] = useState<string | null>(null)
 
   const session = getAuthSession()
   const employeeAssignedZone = session?.assignedZone
@@ -40,11 +48,12 @@ export function OperationsAdminPanel({ snapshot, userRole }: OperationsAdminPane
     return fallbackZone
   }, [isEmployee, employeeAssignedZone, zones, fallbackZone])
 
+  // Initialize sensor form with empty/clean values for new sensors
   const [sensorForm, setSensorForm] = useState<AdminSensorRequest>({
     zoneName: initialZone?.zoneName ?? '',
     sensorType: 'THERMAL',
-    model: 'Vanrakshak Sentinel X1',
-    location: 'ridge line',
+    model: '',
+    location: '',
     latitude: initialZone?.latitude ?? 0,
     longitude: initialZone?.longitude ?? 0,
     coverageRadiusKm: 6.5,
@@ -61,49 +70,106 @@ export function OperationsAdminPanel({ snapshot, userRole }: OperationsAdminPane
     equipment: ['Fire Suit', 'Water Tanker', 'Thermal Drone'],
   })
 
-  const [equipmentUseForm, setEquipmentUseForm] = useState<EquipmentUsageRequest>({
-    equipmentName: '',
-    employeeId: 'EMP-001',
-    purpose: 'Operational response',
-  })
-  const [selectedOutpostId, setSelectedOutpostId] = useState(outposts[0]?.outpostId ?? '')
-
-  const selectedOutpost = outposts.find((item) => item.outpostId === selectedOutpostId) ?? null
+  const [editingOutpostId, setEditingOutpostId] = useState<string | null>(null)
   const editingOutpost = outposts.find((item) => item.outpostId === editingOutpostId) ?? null
 
-  useEffect(() => {
-    if (!editingOutpost) {
-      return
+  const [editingSensorId, setEditingSensorId] = useState<string | null>(null)
+  const editingSensor = useMemo(() => {
+    if (!editingSensorId) return null
+    for (const zone of zones) {
+      const found = zone.sensors?.find(s => s.sensorId === editingSensorId)
+      if (found) return found
     }
+    return null
+  }, [editingSensorId, zones])
 
-    setActiveTab('outpost')
+  useEffect(() => {
+    if (!editingSensor) return
+    setSensorForm({
+      zoneName: editingSensor.zone,
+      sensorType: editingSensor.sensorType,
+      model: editingSensor.model,
+      location: editingSensor.location,
+      latitude: editingSensor.latitude,
+      longitude: editingSensor.longitude,
+      coverageRadiusKm: editingSensor.coverageRadiusKm,
+    })
+  }, [editingSensor])
+
+  useEffect(() => {
+    if (!editingOutpost) return
     setOutpostForm({
       outpostName: editingOutpost.outpostName,
       zoneName: editingOutpost.zone,
-      latitude: editingOutpost.latitude,
-      longitude: editingOutpost.longitude,
+      latitude: parseFloat(editingOutpost.latitude.toFixed(4)),
+      longitude: parseFloat(editingOutpost.longitude.toFixed(4)),
       employeeCount: editingOutpost.employeeCount,
       operationalRole: editingOutpost.operationalRole,
-      coverageRadiusKm: editingOutpost.coverageRadiusKm,
+      coverageRadiusKm: parseFloat(editingOutpost.coverageRadiusKm.toFixed(1)),
       equipment: editingOutpost.availableEquipment,
     })
     setEquipmentCsv(editingOutpost.availableEquipment.join(', '))
   }, [editingOutpost])
 
+  // Auto-clear status messages after 4 seconds
+  useEffect(() => {
+    if (!status) return
+    const timer = setTimeout(() => setStatus(null), 4000)
+    return () => clearTimeout(timer)
+  }, [status])
+
   const submitSensor = async () => {
+    if (!sensorForm.model.trim()) {
+      setStatus({ type: 'error', message: 'Please enter a sensor model name.' })
+      return
+    }
+    if (!sensorForm.location.trim()) {
+      setStatus({ type: 'error', message: 'Please enter a location label for the sensor.' })
+      return
+    }
     setBusy(true)
     setStatus(null)
     try {
-      await apiClient.createSensor(sensorForm)
-      setStatus('Sensor created. Refreshing map...')
-      window.setTimeout(() => window.location.reload(), 800)
+      if (editingSensorId) {
+        await apiClient.updateSensor(editingSensorId, sensorForm)
+        setStatus({ type: 'success', message: '✅ Sensor updated successfully. Refreshing...' })
+      } else {
+        await apiClient.createSensor(sensorForm)
+        setStatus({ type: 'success', message: '✅ Sensor deployed successfully. Refreshing...' })
+      }
+      window.setTimeout(() => {
+        resetSensorForm()
+        setBusy(false)
+        if (onRefresh) onRefresh()
+      }, 300)
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Failed to create sensor')
+      setStatus({ type: 'error', message: error instanceof Error ? error.message : 'Failed to save sensor' })
+      setBusy(false)
+    }
+  }
+
+  const deleteSensor = async (sensorId: string) => {
+    if (!window.confirm('Are you sure you want to remove this sensor? This action cannot be undone.')) return
+    setBusy(true)
+    setStatus(null)
+    try {
+      await apiClient.deleteSensor(sensorId)
+      setStatus({ type: 'success', message: '✅ Sensor removed. Refreshing...' })
+      window.setTimeout(() => {
+        setBusy(false)
+        if (onRefresh) onRefresh()
+      }, 300)
+    } catch (error) {
+      setStatus({ type: 'error', message: error instanceof Error ? error.message : 'Failed to delete sensor' })
       setBusy(false)
     }
   }
 
   const submitOutpost = async () => {
+    if (!outpostForm.outpostName.trim()) {
+      setStatus({ type: 'error', message: 'Please enter an outpost name.' })
+      return
+    }
     setBusy(true)
     setStatus(null)
     try {
@@ -112,207 +178,151 @@ export function OperationsAdminPanel({ snapshot, userRole }: OperationsAdminPane
         .map((item) => item.trim())
         .filter((item) => item.length > 0)
 
-      await apiClient.createOutpost({
-        ...outpostForm,
-        equipment,
-      })
-      setEditingOutpostId(null)
-      setStatus(editingOutpostId ? 'Outpost updated. Refreshing map...' : 'Outpost created. Refreshing map...')
-      window.setTimeout(() => window.location.reload(), 800)
+      if (editingOutpostId) {
+        // Update existing outpost — API uses createOutpost endpoint which backend handles as upsert
+        // We call delete+create via the backend's update path
+        await apiClient.createOutpost({ ...outpostForm, equipment })
+        setStatus({ type: 'success', message: '✅ Outpost updated successfully. Refreshing...' })
+        window.setTimeout(() => {
+          setEditingOutpostId(null)
+          setBusy(false)
+          if (onRefresh) onRefresh()
+        }, 300)
+      } else {
+        // Create new outpost
+        await apiClient.createOutpost({ ...outpostForm, equipment })
+        setStatus({ type: 'success', message: '✅ Outpost deployed successfully. Refreshing...' })
+        // Reset form to a clean state for the next outpost
+        const firstZone = zones[0]
+        setOutpostForm({
+          outpostName: `${firstZone?.zoneName ?? 'Vanrakshak'} Outpost`,
+          zoneName: firstZone?.zoneName ?? '',
+          latitude: (firstZone?.latitude ?? 0) + 0.018,
+          longitude: (firstZone?.longitude ?? 0) - 0.014,
+          employeeCount: 18,
+          operationalRole: 'MANPOWER_AND_UAV',
+          coverageRadiusKm: 18,
+          equipment: ['Fire Suit', 'Water Tanker', 'Thermal Drone'],
+        })
+        setEquipmentCsv('Fire Suit, Water Tanker, Thermal Drone')
+        window.setTimeout(() => {
+          setBusy(false)
+          if (onRefresh) onRefresh()
+        }, 300)
+      }
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Failed to create outpost')
+      setStatus({ type: 'error', message: error instanceof Error ? error.message : 'Failed to save outpost' })
       setBusy(false)
     }
   }
-
+  
   const deleteOutpost = async (outpostId: string) => {
-    if (!window.confirm('Delete this outpost?')) {
-      return
-    }
-
+    if (!window.confirm('Are you sure you want to delete this outpost? This action cannot be undone.')) return
     setBusy(true)
     setStatus(null)
     try {
       await apiClient.deleteOutpost(outpostId)
-      setStatus('Outpost deleted. Refreshing map...')
-      window.setTimeout(() => window.location.reload(), 600)
+      setStatus({ type: 'success', message: '✅ Outpost deleted. Refreshing...' })
+      window.setTimeout(() => {
+        setBusy(false)
+        if (onRefresh) onRefresh()
+      }, 300)
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Failed to delete outpost')
+      setStatus({ type: 'error', message: error instanceof Error ? error.message : 'Failed to delete outpost' })
       setBusy(false)
     }
   }
 
-  const submitEquipmentUse = async () => {
-    setBusy(true)
-    setStatus(null)
-    try {
-      if (!selectedOutpostId) {
-        throw new Error('Select an outpost first')
-      }
-
-      await apiClient.useOutpostEquipment(selectedOutpostId, equipmentUseForm)
-      setStatus(`Equipment approved for ${equipmentUseForm.employeeId} from ${selectedOutpostId}`)
-      setBusy(false)
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Failed to use equipment')
-      setBusy(false)
-    }
+  const resetSensorForm = () => {
+    setEditingSensorId(null)
+    setSensorForm({
+      zoneName: initialZone?.zoneName ?? '',
+      sensorType: 'THERMAL',
+      model: '',
+      location: '',
+      latitude: initialZone?.latitude ?? 0,
+      longitude: initialZone?.longitude ?? 0,
+      coverageRadiusKm: 6.5,
+    })
   }
+
+  // Get sensors for current selected zone
+  const currentZoneSensors = useMemo(() => {
+    const zone = zones.find(z => z.zoneName === sensorForm.zoneName)
+    const sensors = zone?.sensors ?? []
+    if (isEmployee) {
+      return sensors.filter(sensor => sensor.createdByUsername === session?.username)
+    }
+    return sensors
+  }, [zones, sensorForm.zoneName, isEmployee, session?.username])
+
+  // Get outposts for display
+  const displayOutposts = useMemo(() => {
+    return outposts.filter(o => isEmployee ? o.zone === employeeAssignedZone : true)
+  }, [outposts, isEmployee, employeeAssignedZone])
 
   return (
-    <section id="admin-console" className="card rounded-2xl p-4 sm:p-6">
-      <div className="flex flex-col gap-3 border-b border-border-subtle/70 pb-4 dark:border-slate-800 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-emerald-600 dark:text-emerald-400">
-            Operations admin
-          </p>
-          <h2 className="mt-1 text-xl font-bold tracking-tight text-text-primary dark:text-white">
-            Sensor and outpost setup
-          </h2>
-          <p className="mt-1 text-sm text-text-secondary dark:text-slate-400">
-            Create map pins, coverage circles, and response bases for the operational dashboard.
-          </p>
+    <section id="admin-console" className="space-y-5 max-w-5xl mx-auto">
+      {/* Tab Switcher */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="inline-flex rounded-xl border border-border-subtle bg-bg-canvas p-1.5">
+          <TabButton active={activeTab === 'sensor'} label="🌡️ Sensors" onClick={() => setActiveTab('sensor')} />
+          <TabButton active={activeTab === 'outpost'} label="⛺ Outposts" onClick={() => setActiveTab('outpost')} />
         </div>
-
-        <div className="inline-flex rounded-full border border-border-subtle bg-bg-canvas p-1 dark:border-slate-700 dark:bg-slate-900">
-          {isEmployee && <TabButton active={activeTab === 'sensor'} label="Add sensor" onClick={() => setActiveTab('sensor')} />}
-          {isHead && <TabButton active={activeTab === 'outpost'} label="Add outpost" onClick={() => setActiveTab('outpost')} />}
-          {isEmployee && <TabButton active={activeTab === 'equipment'} label="Use equipment" onClick={() => setActiveTab('equipment')} />}
-        </div>
+        {activeTab === 'sensor' && !editingSensorId && (
+          <p className="text-xs text-text-muted">
+            {isEmployee ? `Deploying sensors in ${employeeAssignedZone}` : 'Managing sensors across all zones'}
+          </p>
+        )}
       </div>
 
+      {/* Status Messages */}
       {status && (
-        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-300">
-          {status}
+        <div 
+          className="rounded-xl px-4 py-3 text-sm font-medium animate-fade-in"
+          style={status.type === 'success' 
+            ? { border: '1px solid rgba(16,185,129,0.2)', backgroundColor: 'rgba(16,185,129,0.05)', color: '#10B981' }
+            : status.type === 'error'
+            ? { border: '1px solid rgba(239,68,68,0.2)', backgroundColor: 'rgba(239,68,68,0.05)', color: '#EF4444' }
+            : { border: '1px solid #FDE68A', backgroundColor: '#FFF8EC', color: '#92400E' }
+          }
+        >
+          {status.message}
         </div>
       )}
 
-      <div className="mt-5 grid gap-3">
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-text-secondary dark:text-slate-400">Zone Directory</p>
-            <h3 className="text-base font-bold text-text-primary dark:text-white">
-              {isEmployee ? 'Your assigned zone and outpost' : 'All zones and outposts'}
-            </h3>
-          </div>
-
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-2">
-          {zones
-            .filter((zone) => {
-              if (isEmployee && employeeAssignedZone) {
-                return zone.zoneName === employeeAssignedZone
-              }
-              return true
-            })
-            .map((zone) => {
-              const outpost = zone.outpost
-              const sensors = zone.sensors ?? []
-
-            return (
-              <article key={zone.zoneName} className="rounded-2xl border border-border-subtle bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h4 className="text-lg font-bold text-text-primary dark:text-white">{zone.zoneName}</h4>
-                    {outpost ? (
-                      <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
-                        Outpost: {outpost.outpostName} ({outpost.outpostId})
-                      </p>
-                    ) : (
-                      <p className="text-sm text-amber-600 dark:text-amber-400">No outpost created yet</p>
-                    )}
-                  </div>
-                  {outpost && (
-                    <span className="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                      {outpost.employeeCount} crew
-                    </span>
-                  )}
+      <div className="mt-1">
+        {activeTab === 'sensor' ? (
+          <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
+            {/* Create/Edit Sensor Form */}
+            <div className="zone-card">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="heading-caps mb-1">{editingSensorId ? 'Edit Sensor' : 'Deploy New Sensor'}</p>
+                  <h3 className="text-base font-bold text-text-primary">
+                    {editingSensorId ? 'Update sensor configuration' : 'Configure and place a new sensor'}
+                  </h3>
                 </div>
-
-                {outpost && (
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    <MiniStat label="Coverage" value={`${outpost.coverageRadiusKm.toFixed(1)} km`} />
-                    <MiniStat label="Role" value={outpost.operationalRole} />
-                  </div>
+                {editingSensorId && (
+                  <button
+                    type="button"
+                    onClick={resetSensorForm}
+                    className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 transition shadow-sm"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                    Cancel
+                  </button>
                 )}
-
-                <div className="mt-4 border-t border-border-subtle pt-3 dark:border-slate-800">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-text-secondary dark:text-slate-400 mb-2">
-                    Sensors ({sensors.length})
-                  </p>
-                  {sensors.length > 0 ? (
-                    <div className="space-y-2 max-h-32 overflow-y-auto pr-2 custom-scrollbar">
-                      {sensors.map((sensor, idx) => (
-                        <div key={idx} className="flex items-center justify-between rounded-lg bg-bg-canvas px-3 py-2 text-xs dark:bg-slate-950/40">
-                          <div>
-                            <p className="font-bold text-text-primary dark:text-white">{sensor.sensorType}</p>
-                            <p className="text-text-secondary dark:text-slate-400">{sensor.model}</p>
-                          </div>
-                          <div className="text-right">
-                            <span className="rounded bg-emerald-100 px-1.5 py-0.5 font-mono text-[9px] text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300">
-                              {sensor.createdByRole}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-slate-500 italic">No sensors placed.</p>
-                  )}
-                </div>
-
-                {isHead && (
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {outpost ? (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => setEditingOutpostId(outpost.outpostId)}
-                          className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-700"
-                        >
-                          Manage Outpost
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => deleteOutpost(outpost.outpostId)}
-                          className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-950/50"
-                        >
-                          Delete
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOutpostForm(prev => ({ ...prev, zoneName: zone.zoneName }))
-                          setEditingOutpostId(null)
-                          setActiveTab('outpost')
-                        }}
-                        className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-950/50"
-                      >
-                        Create Outpost Here
-                      </button>
-                    )}
-                  </div>
-                )}
-              </article>
-            )
-          })}
-        </div>
-      </div>
-
-      <div className="mt-5 grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
-        <div className="space-y-4">
-          {activeTab === 'sensor' && isEmployee ? (
-            <div className="space-y-4 rounded-2xl border border-border-subtle/70 bg-bg-canvas/70 p-4 dark:border-slate-800 dark:bg-slate-950/30">
-              <FormHeader title="Create sensor" subtitle="A forest employee can place a new sensor and set its model and range." />
+              </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Zone">
                   <select
                     value={sensorForm.zoneName}
-                    onChange={(event) => setSensorForm((previous) => ({ ...previous, zoneName: event.target.value }))}
-                    className="w-full rounded-xl border border-border-subtle bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 disabled:opacity-60 disabled:cursor-not-allowed"
+                    onChange={(event) => {
+                      setSensorForm((previous) => ({ ...previous, zoneName: event.target.value }))
+                      setEditingSensorId(null)
+                    }}
+                    className="field-input disabled:opacity-60 disabled:cursor-not-allowed"
                     disabled={isEmployee}
                   >
                     {zones.map((zone) => (
@@ -320,29 +330,42 @@ export function OperationsAdminPanel({ snapshot, userRole }: OperationsAdminPane
                     ))}
                   </select>
                 </Field>
-                <Field label="Type">
-                  <select
-                    value={sensorForm.sensorType}
-                    onChange={(event) => setSensorForm((previous) => ({ ...previous, sensorType: event.target.value }))}
-                    className="w-full rounded-xl border border-border-subtle bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-                  >
-                    {sensorTypes.map((type) => <option key={type} value={type}>{type}</option>)}
-                  </select>
+                <Field label="Sensor Type">
+                  <div className="flex gap-1.5">
+                    {sensorTypes.map((type) => {
+                      const info = sensorTypeInfo[type]
+                      return (
+                        <button
+                          key={type}
+                          type="button"
+                          onClick={() => setSensorForm((prev) => ({ ...prev, sensorType: type }))}
+                          className="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[11px] font-bold transition-all border"
+                          style={sensorForm.sensorType === type
+                            ? { backgroundColor: '#059669', color: '#FFFFFF', borderColor: '#059669', boxShadow: '0 1px 3px rgba(5,150,105,0.2)' }
+                            : { backgroundColor: '#FFFFFF', color: '#475569', borderColor: '#E2E8F0' }
+                          }
+                        >
+                          <span>{info.icon}</span>
+                          <span>{info.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
                 </Field>
-                <Field label="Model">
+                <Field label="Model Name">
                   <input
                     value={sensorForm.model}
                     onChange={(event) => setSensorForm((previous) => ({ ...previous, model: event.target.value }))}
-                    className="w-full rounded-xl border border-border-subtle bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-                    placeholder="Forest Sentinel X1"
+                    className="field-input"
+                    placeholder="e.g., Vanrakshak Sentinel X1"
                   />
                 </Field>
-                <Field label="Location label">
+                <Field label="Location Label">
                   <input
                     value={sensorForm.location}
                     onChange={(event) => setSensorForm((previous) => ({ ...previous, location: event.target.value }))}
-                    className="w-full rounded-xl border border-border-subtle bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-                    placeholder="ridge line"
+                    className="field-input"
+                    placeholder="e.g., Ridge line, Valley floor"
                   />
                 </Field>
                 <Field label="Latitude">
@@ -351,7 +374,7 @@ export function OperationsAdminPanel({ snapshot, userRole }: OperationsAdminPane
                     step="0.0001"
                     value={sensorForm.latitude}
                     onChange={(event) => setSensorForm((previous) => ({ ...previous, latitude: Number(event.target.value) }))}
-                    className="w-full rounded-xl border border-border-subtle bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+                    className="field-input text-mono"
                   />
                 </Field>
                 <Field label="Longitude">
@@ -360,202 +383,342 @@ export function OperationsAdminPanel({ snapshot, userRole }: OperationsAdminPane
                     step="0.0001"
                     value={sensorForm.longitude}
                     onChange={(event) => setSensorForm((previous) => ({ ...previous, longitude: Number(event.target.value) }))}
-                    className="w-full rounded-xl border border-border-subtle bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+                    className="field-input text-mono"
                   />
                 </Field>
-                <Field label="Coverage radius (km)">
+                <Field label="Coverage Radius (km)">
                   <input
                     type="number"
                     step="0.1"
                     value={sensorForm.coverageRadiusKm}
                     onChange={(event) => setSensorForm((previous) => ({ ...previous, coverageRadiusKm: Number(event.target.value) }))}
-                    className="w-full rounded-xl border border-border-subtle bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+                    className="field-input text-mono"
                   />
                 </Field>
               </div>
-              <p className="text-xs font-semibold text-text-secondary dark:text-slate-400">Permission: Employee only.</p>
               <button
                 type="button"
                 disabled={busy || zones.length === 0}
                 onClick={submitSensor}
-                className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="btn-primary mt-4"
               >
-                Save sensor
+                {busy ? 'Processing...' : editingSensorId ? '🔄 Update Sensor' : '🚀 Deploy Sensor'}
               </button>
             </div>
-          ) : activeTab === 'outpost' && isHead ? (
-            <div className="space-y-4 rounded-2xl border border-border-subtle/70 bg-bg-canvas/70 p-4 dark:border-slate-800 dark:bg-slate-950/30">
-              <FormHeader title="Create outpost" subtitle="Head can place an outpost, assign crew size, role, and equipment." />
-              {editingOutpost && (
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-800/50 dark:bg-emerald-950/30 dark:text-emerald-300">
-                  Editing {editingOutpost.outpostName}. Location stays fixed to the current outpost coordinates.
+            
+            {/* Existing Sensors List */}
+            <div className="zone-card">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="heading-caps mb-1">Deployed Sensors</p>
+                  <h3 className="text-base font-bold text-text-primary">
+                    {sensorForm.zoneName || 'Select a zone'}
+                  </h3>
                 </div>
-              )}
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Outpost name">
-                  <input
-                    value={outpostForm.outpostName}
-                    onChange={(event) => setOutpostForm((previous) => ({ ...previous, outpostName: event.target.value }))}
-                    className="w-full rounded-xl border border-border-subtle bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-                    placeholder="Kullu North Outpost"
-                  />
-                </Field>
-                <Field label="Zone">
-                  <select
-                    value={outpostForm.zoneName}
-                    onChange={(event) => setOutpostForm((previous) => ({ ...previous, zoneName: event.target.value }))}
-                    className="w-full rounded-xl border border-border-subtle bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-                  >
-                    {zones.map((zone) => (
-                      <option key={zone.zoneName} value={zone.zoneName}>{zone.zoneName}</option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Latitude">
-                  <input
-                    type="number"
-                    step="0.0001"
-                    value={outpostForm.latitude}
-                    onChange={(event) => setOutpostForm((previous) => ({ ...previous, latitude: Number(event.target.value) }))}
-                    className="w-full rounded-xl border border-border-subtle bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-                  />
-                </Field>
-                <Field label="Longitude">
-                  <input
-                    type="number"
-                    step="0.0001"
-                    value={outpostForm.longitude}
-                    onChange={(event) => setOutpostForm((previous) => ({ ...previous, longitude: Number(event.target.value) }))}
-                    className="w-full rounded-xl border border-border-subtle bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-                  />
-                </Field>
-                <Field label="Employees">
-                  <input
-                    type="number"
-                    min="1"
-                    value={outpostForm.employeeCount}
-                    onChange={(event) => setOutpostForm((previous) => ({ ...previous, employeeCount: Number(event.target.value) }))}
-                    className="w-full rounded-xl border border-border-subtle bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-                  />
-                </Field>
-                <Field label="Coverage radius (km)">
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={outpostForm.coverageRadiusKm}
-                    onChange={(event) => setOutpostForm((previous) => ({ ...previous, coverageRadiusKm: Number(event.target.value) }))}
-                    className="w-full rounded-xl border border-border-subtle bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-                  />
-                </Field>
-                <Field label="Response role">
-                  <input
-                    value={outpostForm.operationalRole}
-                    onChange={(event) => setOutpostForm((previous) => ({ ...previous, operationalRole: event.target.value }))}
-                    className="w-full rounded-xl border border-border-subtle bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-                    placeholder="MANPOWER_AND_UAV"
-                  />
-                </Field>
-                <Field label="Equipment list (comma separated)">
-                  <input
-                    value={equipmentCsv}
-                    onChange={(event) => setEquipmentCsv(event.target.value)}
-                    className="w-full rounded-xl border border-border-subtle bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-                    placeholder="Fire Suit, Water Tanker, Thermal Drone"
-                  />
-                </Field>
+                <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ color: '#94A3B8', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+                  {currentZoneSensors.length} sensor{currentZoneSensors.length !== 1 ? 's' : ''}
+                </span>
               </div>
-              <p className="text-xs font-semibold text-text-secondary dark:text-slate-400">Permission: Head only.</p>
-              <button
-                type="button"
-                disabled={busy || zones.length === 0}
-                onClick={submitOutpost}
-                className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {editingOutpost ? 'Update outpost' : 'Save outpost'}
-              </button>
-            </div>
-          ) : isEmployee ? (
-            <div className="space-y-4 rounded-2xl border border-border-subtle/70 bg-bg-canvas/70 p-4 dark:border-slate-800 dark:bg-slate-950/30">
-              <FormHeader title="Use outpost equipment" subtitle="Employee can use only equipment assigned to the selected outpost." />
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Outpost">
-                  <select
-                    value={selectedOutpostId}
-                    onChange={(event) => {
-                      const nextOutpostId = event.target.value
-                      setSelectedOutpostId(nextOutpostId)
-                      const nextOutpost = outposts.find((item) => item.outpostId === nextOutpostId)
-                      if (nextOutpost?.availableEquipment?.[0]) {
-                        setEquipmentUseForm((previous) => ({ ...previous, equipmentName: nextOutpost.availableEquipment[0] }))
-                      }
-                    }}
-                    className="w-full rounded-xl border border-border-subtle bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-                  >
-                    <option value="">Select outpost</option>
-                    {outposts.map((outpost) => (
-                      <option key={outpost.outpostId} value={outpost.outpostId}>{outpost.outpostName}</option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Equipment">
-                  <select
-                    value={equipmentUseForm.equipmentName}
-                    onChange={(event) => setEquipmentUseForm((previous) => ({ ...previous, equipmentName: event.target.value }))}
-                    className="w-full rounded-xl border border-border-subtle bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-                  >
-                    <option value="">Select equipment</option>
-                    {(selectedOutpost?.availableEquipment ?? []).map((item) => (
-                      <option key={item} value={item}>{item}</option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Employee ID">
-                  <input
-                    value={equipmentUseForm.employeeId}
-                    onChange={(event) => setEquipmentUseForm((previous) => ({ ...previous, employeeId: event.target.value }))}
-                    className="w-full rounded-xl border border-border-subtle bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-                    placeholder="EMP-001"
-                  />
-                </Field>
-                <Field label="Purpose">
-                  <input
-                    value={equipmentUseForm.purpose}
-                    onChange={(event) => setEquipmentUseForm((previous) => ({ ...previous, purpose: event.target.value }))}
-                    className="w-full rounded-xl border border-border-subtle bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-                    placeholder="Wildfire containment support"
-                  />
-                </Field>
+              <div className="max-h-[400px] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                {currentZoneSensors.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-3xl mb-2">📡</p>
+                    <p className="text-sm text-text-muted font-medium">No sensors deployed in this zone yet.</p>
+                    <p className="text-xs text-text-muted mt-1">Use the form to deploy your first sensor.</p>
+                  </div>
+                ) : (
+                  currentZoneSensors.map((sensor, index) => {
+                    const info = sensorTypeInfo[sensor.sensorType] || sensorTypeInfo.THERMAL
+                    const isEditing = editingSensorId === sensor.sensorId
+                    const isDanger = sensor.status === 'DANGER' || sensor.status === 'CRITICAL'
+                    const isWarning = sensor.status === 'WARNING'
+                    const thresholdPct = Math.min(100, (sensor.value / sensor.dangerThreshold) * 100)
+                    const statusColor = isDanger ? '#EF4444' : isWarning ? '#F59E0B' : '#10B981'
+                    return (
+                      <div key={sensor.sensorId} className={`stagger-item rounded-xl border p-4 transition-all ${
+                        isEditing 
+                          ? 'border-accent-primary bg-accent-primary-light shadow-sm' 
+                          : isDanger
+                          ? 'danger-glow border-red-200 bg-red-50/30'
+                          : 'border-border-subtle bg-bg-canvas hover:border-border-strong hover:shadow-sm'
+                      }`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-start gap-3 min-w-0 flex-1">
+                            <div className="relative shrink-0">
+                              <div className="h-10 w-10 rounded-xl flex items-center justify-center text-lg" style={{ backgroundColor: info.color + '15', border: `1px solid ${info.color}25` }}>
+                                {info.icon}
+                              </div>
+                              {isDanger && <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 border-2 border-white pulse-dot" />}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-bold text-sm" style={{ color: '#0F172A' }}>
+                                {sensor.sensorType} <span className="font-normal" style={{ color: '#475569' }}>— {sensor.location}</span>
+                              </p>
+                              <p className="text-[11px] mt-0.5" style={{ color: '#94A3B8' }}>
+                                {sensor.model} • {sensor.coverageRadiusKm}km radius
+                              </p>
+                              {/* Live value + threshold bar */}
+                              <div className="mt-2 flex items-center gap-3">
+                                <span 
+                                  className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider"
+                                  style={{ backgroundColor: statusColor + '18', color: statusColor }}
+                                >
+                                  {isDanger ? '⚠ ' : ''}{sensor.status}
+                                </span>
+                                <span className="text-sm font-bold text-mono" style={{ color: statusColor }}>
+                                  {sensor.value.toFixed(1)}
+                                  <span className="text-[10px] font-normal ml-0.5" style={{ color: '#94A3B8' }}>{sensor.unit}</span>
+                                </span>
+                              </div>
+                              {/* Threshold progress bar */}
+                              <div className="mt-1.5 flex items-center gap-2">
+                                <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: '#F1F5F9' }}>
+                                  <div 
+                                    className="h-full rounded-full transition-all duration-700" 
+                                    style={{ width: `${thresholdPct}%`, backgroundColor: statusColor }}
+                                  />
+                                </div>
+                                <span className="text-[9px] text-mono font-semibold" style={{ color: '#94A3B8', minWidth: 32, textAlign: 'right' }}>
+                                  {thresholdPct.toFixed(0)}%
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => setEditingSensorId(sensor.sensorId)}
+                              className="rounded-lg bg-white px-2.5 py-1.5 text-[10px] font-bold text-slate-700 shadow-sm border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all"
+                            >
+                              ✏️ Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => deleteSensor(sensor.sensorId)}
+                              className="rounded-lg bg-rose-50 px-2.5 py-1.5 text-[10px] font-bold text-rose-600 shadow-sm border border-rose-200 hover:bg-rose-100 hover:border-rose-300 transition-all"
+                            >
+                              🗑️ Delete
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
               </div>
-              <p className="text-xs text-text-secondary dark:text-slate-400">
-                Allowed equipment: {(selectedOutpost?.availableEquipment ?? []).join(', ') || 'None assigned yet'}
-              </p>
-              <button
-                type="button"
-                disabled={busy || outposts.length === 0}
-                onClick={submitEquipmentUse}
-                className="rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Use equipment
-              </button>
             </div>
-          ) : (
-            <div className="rounded-2xl border border-border-subtle/70 bg-bg-canvas/70 p-4 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-950/30 dark:text-slate-300">
-              Logged in as <span className="font-bold">{normalizedRole}</span>. No additional actions are available for this role.
-            </div>
-          )}
-        </div>
-
-        <aside className="space-y-4 rounded-2xl border border-border-subtle/70 bg-white p-4 dark:border-slate-800 dark:bg-slate-950/40">
-          <FormHeader title="Deployment notes" subtitle="What changes when you create a sensor or an outpost." />
-          <ChecklistItem title="Sensor placement" text="The new sensor is added to the live simulation, map overlay, and alert engine immediately." />
-          <ChecklistItem title="Coverage" text="The coverage radius is drawn on the map so you can see which zones the device protects." />
-          <ChecklistItem title="Outpost routing" text="Outposts are saved in the database and used as the nearest-response target for alerts." />
-          <ChecklistItem title="Role control" text="Employees can add sensors and use assigned outpost equipment. Heads can create outposts and assign equipment." />
-          <ChecklistItem title="Map refresh" text="After saving, the page reloads so the latest snapshot reflects the new layout." />
-          <div className="rounded-xl border border-dashed border-slate-300 bg-bg-canvas p-3 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-            Google Maps can be added later with a provider key. This build currently uses live OpenStreetMap tiles so the map and overlays remain interactive without extra credentials.
           </div>
-        </aside>
+        ) : (
+          <div className="space-y-5">
+            {/* CREATE NEW OUTPOST FORM — HEAD only */}
+            {isHead && (
+              <div className="zone-card">
+                <div className="mb-4">
+                  <p className="heading-caps mb-1">Create Outpost</p>
+                  <h3 className="text-base font-bold text-text-primary">Deploy a new field outpost</h3>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Zone">
+                    <select
+                      value={outpostForm.zoneName}
+                      onChange={(e) => {
+                        const z = e.target.value
+                        setOutpostForm(prev => ({ ...prev, zoneName: z, outpostName: z + ' Outpost' }))
+                      }}
+                      className="field-input"
+                    >
+                      {zones.map(z => <option key={z.zoneName} value={z.zoneName}>{z.zoneName}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Outpost Name">
+                    <input
+                      value={outpostForm.outpostName}
+                      onChange={(e) => setOutpostForm(prev => ({ ...prev, outpostName: e.target.value }))}
+                      className="field-input"
+                      placeholder="e.g., Central India Outpost"
+                    />
+                  </Field>
+                  <Field label="Crew Count">
+                    <input
+                      type="number"
+                      min="1"
+                      value={outpostForm.employeeCount}
+                      onChange={(e) => setOutpostForm(prev => ({ ...prev, employeeCount: Number(e.target.value) }))}
+                      className="field-input text-mono"
+                    />
+                  </Field>
+                  <Field label="Coverage Radius (km)">
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={outpostForm.coverageRadiusKm}
+                      onChange={(e) => setOutpostForm(prev => ({ ...prev, coverageRadiusKm: Number(e.target.value) }))}
+                      className="field-input text-mono"
+                    />
+                  </Field>
+                  <Field label="Response Role">
+                    <select
+                      value={outpostForm.operationalRole}
+                      onChange={(e) => setOutpostForm(prev => ({ ...prev, operationalRole: e.target.value }))}
+                      className="field-input"
+                    >
+                      <option value="MANPOWER_AND_UAV">Manpower + UAV</option>
+                      <option value="MANPOWER_ONLY">Manpower Only</option>
+                      <option value="UAV_ONLY">UAV Only</option>
+                    </select>
+                  </Field>
+                  <Field label="Equipment (comma separated)">
+                    <input
+                      value={equipmentCsv}
+                      onChange={(e) => setEquipmentCsv(e.target.value)}
+                      className="field-input"
+                      placeholder="Fire Suit, Water Tanker, Thermal Drone"
+                    />
+                  </Field>
+                </div>
+                <button
+                  type="button"
+                  disabled={busy || !outpostForm.zoneName}
+                  onClick={submitOutpost}
+                  className="btn-primary mt-4"
+                >
+                  {busy ? 'Deploying...' : '⛺ Deploy Outpost'}
+                </button>
+              </div>
+            )}
+
+            {/* OUTPOST LIST */}
+            <div className="zone-card">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="heading-caps mb-1">Field Outposts</p>
+                  <h3 className="text-base font-bold" style={{ color: '#0F172A' }}>
+                    {isEmployee ? 'Your Zone Outposts' : 'All Operational Outposts'}
+                  </h3>
+                </div>
+                <span className="text-xs font-bold text-text-muted bg-bg-canvas px-2.5 py-1 rounded-full border border-border-subtle">
+                  {displayOutposts.length} outpost{displayOutposts.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <div className="space-y-3">
+                {displayOutposts.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-3xl mb-2">⛺</p>
+                    <p className="text-sm text-text-muted font-medium">No outposts found.</p>
+                    {isHead && <p className="text-xs text-text-muted mt-1">Use the form above to deploy your first outpost.</p>}
+                  </div>
+                ) : (
+                  displayOutposts.map((outpost) => {
+                    const isEditing = editingOutpostId === outpost.outpostId
+                    const cardClass = isEditing
+                      ? 'rounded-xl border overflow-hidden border-accent-secondary bg-accent-secondary-light shadow-sm transition-all'
+                      : 'rounded-xl border overflow-hidden border-border-subtle bg-bg-canvas hover:border-border-strong transition-all'
+                    return (
+                    <div key={outpost.outpostId} className={cardClass}>
+                      <div 
+                        className="flex items-center justify-between gap-2 p-4 cursor-pointer select-none" 
+                        onClick={() => setEditingOutpostId(prev => prev === outpost.outpostId ? null : outpost.outpostId)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-lg bg-[#1C2B22] text-white flex items-center justify-center text-lg shrink-0">⛺</div>
+                          <div>
+                            <h4 className="font-bold text-sm" style={{ color: '#0F172A' }}>{outpost.outpostName}</h4>
+                            <p className="text-xs mt-0.5" style={{ color: '#475569' }}>{outpost.zone} • {outpost.employeeCount} crew • {outpost.coverageRadiusKm}km range</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2 items-center">
+                          {outpost.availableEquipment?.length > 0 && (
+                            <span className="text-[10px] hidden sm:block" style={{ color: '#94A3B8' }}>
+                              {outpost.availableEquipment.length} equipment
+                            </span>
+                          )}
+                          {!isEmployee && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); deleteOutpost(outpost.outpostId); }}
+                              className="rounded-lg bg-rose-50 px-2.5 py-1.5 text-[10px] font-bold text-rose-700 shadow-sm border border-rose-200 hover:bg-rose-100 transition"
+                            >
+                              🗑️ Delete
+                            </button>
+                          )}
+                          <span 
+                            className="text-slate-400 text-xs ml-1 transition-transform duration-200"
+                            style={editingOutpostId === outpost.outpostId ? { transform: 'rotate(90deg)' } : { transform: 'none' }}
+                          >
+                            ▶
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {editingOutpostId === outpost.outpostId && (
+                        <div className="px-4 pb-4 border-t border-border-subtle animate-fade-in" onClick={e => e.stopPropagation()}>
+                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                            <Field label="Zone">
+                              <input disabled value={outpostForm.zoneName} className="field-input opacity-60 cursor-not-allowed" />
+                            </Field>
+                            <Field label="Outpost Name">
+                              <input disabled value={outpostForm.outpostName} className="field-input opacity-60 cursor-not-allowed" />
+                            </Field>
+                            <Field label="Latitude">
+                              <input disabled type="number" value={outpostForm.latitude} className="field-input opacity-60 cursor-not-allowed text-mono" />
+                            </Field>
+                            <Field label="Longitude">
+                              <input disabled type="number" value={outpostForm.longitude} className="field-input opacity-60 cursor-not-allowed text-mono" />
+                            </Field>
+                            <Field label="Crew Count">
+                              <input
+                                type="number"
+                                min="1"
+                                value={outpostForm.employeeCount}
+                                onChange={(event) => setOutpostForm((previous) => ({ ...previous, employeeCount: Number(event.target.value) }))}
+                                className="field-input"
+                              />
+                            </Field>
+                            <Field label="Coverage Radius (km)">
+                              <input
+                                type="number"
+                                step="0.1"
+                                value={outpostForm.coverageRadiusKm}
+                                onChange={(event) => setOutpostForm((previous) => ({ ...previous, coverageRadiusKm: Number(event.target.value) }))}
+                                className="field-input text-mono"
+                              />
+                            </Field>
+                            <Field label="Response Role">
+                              <select
+                                value={outpostForm.operationalRole}
+                                onChange={(event) => setOutpostForm((previous) => ({ ...previous, operationalRole: event.target.value }))}
+                                className="field-input"
+                              >
+                                <option value="MANPOWER_AND_UAV">Manpower + UAV</option>
+                                <option value="MANPOWER_ONLY">Manpower Only</option>
+                                <option value="UAV_ONLY">UAV Only</option>
+                              </select>
+                            </Field>
+                            <Field label="Equipment (comma separated)">
+                              <input
+                                value={equipmentCsv}
+                                onChange={(event) => setEquipmentCsv(event.target.value)}
+                                className="field-input"
+                                placeholder="Fire Suit, Water Tanker, Thermal Drone"
+                              />
+                            </Field>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={submitOutpost}
+                            className="btn-primary mt-4"
+                          >
+                            {busy ? 'Saving...' : 'Save Changes'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
       </div>
     </section>
   )
@@ -566,8 +729,10 @@ function TabButton({ active, label, onClick }: { active: boolean; label: string;
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-full px-4 py-2 text-xs font-bold uppercase tracking-wider transition ${
-        active ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-950' : 'text-text-secondary hover:text-text-primary dark:text-slate-400 dark:hover:text-white'
+      className={`rounded-lg px-5 py-2.5 text-xs font-bold tracking-wider transition-all ${
+        active 
+          ? 'bg-slate-900 text-white shadow-md' 
+          : 'text-text-secondary hover:text-text-primary hover:bg-white'
       }`}
     >
       {label}
@@ -575,38 +740,11 @@ function TabButton({ active, label, onClick }: { active: boolean; label: string;
   )
 }
 
-function FormHeader({ title, subtitle }: { title: string; subtitle: string }) {
-  return (
-    <div>
-      <h3 className="text-base font-bold text-text-primary dark:text-white">{title}</h3>
-      <p className="mt-1 text-sm text-text-secondary dark:text-slate-400">{subtitle}</p>
-    </div>
-  )
-}
-
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="space-y-1.5 text-sm">
-      <span className="text-xs font-bold uppercase tracking-wider text-text-secondary dark:text-slate-400">{label}</span>
+      <span className="text-[10px] font-bold uppercase tracking-wider text-text-secondary block">{label}</span>
       {children}
     </label>
-  )
-}
-
-function ChecklistItem({ title, text }: { title: string; text: string }) {
-  return (
-    <div className="rounded-xl border border-border-subtle bg-bg-canvas px-3 py-3 dark:border-slate-800 dark:bg-slate-900/70">
-      <p className="text-sm font-bold text-text-primary dark:text-white">{title}</p>
-      <p className="mt-1 text-sm leading-relaxed text-text-secondary dark:text-slate-400">{text}</p>
-    </div>
-  )
-}
-
-function MiniStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-border-subtle bg-bg-canvas px-3 py-2 dark:border-slate-800 dark:bg-slate-950/40">
-      <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-text-secondary dark:text-slate-400">{label}</p>
-      <p className="mt-1 text-sm font-bold text-text-primary dark:text-white">{value}</p>
-    </div>
   )
 }

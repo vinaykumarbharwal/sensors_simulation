@@ -20,6 +20,7 @@ export interface MapSensor extends SensorReading {
   longitude: number
   coverageRadiusKm: number
   createdByRole: string
+  createdByUsername?: string
 }
 
 export interface MapOutpost {

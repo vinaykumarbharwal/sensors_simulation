@@ -112,55 +112,90 @@ public class SensorSimulationService {
                     .filter(sensor -> region.zoneName().equalsIgnoreCase(sensor.getZone()))
                     .forEach(sensor -> ensureSensorMetadata(sensor, zoneEntity));
         }
+
+        // Cleanup legacy dummy sensors that don't have a creator
+        List<SensorEntity> allSensors = sensorRepository.findAll();
+        for (SensorEntity sensor : allSensors) {
+            if (sensor.getCreatedByUsername() == null || sensor.getCreatedByUsername().trim().isEmpty()) {
+                sensorReadingRepository.deleteBySensor(sensor);
+                sensorRepository.delete(sensor);
+            }
+        }
+
+        // ── Restore persisted employee-created sensors from DB into the simulation ──
+        // Without this, dynamic sensors (added by employees) are lost after restart
+        // and never simulated or returned in the map snapshot.
+        List<SensorEntity> persistedSensors = sensorRepository.findAll();
+        for (SensorEntity entity : persistedSensors) {
+            String sensorId = entity.getSensorId();
+            if (sensors.containsKey(sensorId)) {
+                continue; // already loaded as a hardcoded sensor
+            }
+            // Only reload if it has a valid zone and type
+            if (entity.getZone() == null || !StringUtils.hasText(entity.getSensorType())) {
+                continue;
+            }
+            String sensorType = entity.getSensorType().toUpperCase();
+            String zone = entity.getZone().getName();
+            String location = StringUtils.hasText(entity.getLocation()) ? entity.getLocation() : zone + " field node";
+            String model = StringUtils.hasText(entity.getModel()) ? entity.getModel() : resolveSensorModel(sensorType);
+            double coverageKm = entity.getCoverageRadiusKm() > 0 ? entity.getCoverageRadiusKm() : resolveCoverageRadius(sensorType);
+
+            sensors.put(sensorId, new ConfiguredSensor(
+                    sensorId,
+                    zone,
+                    location,
+                    sensorType,
+                    model,
+                    inferUnit(sensorType),
+                    inferDangerThreshold(sensorType),
+                    inferWarningThreshold(sensorType),
+                    coverageKm
+            ));
+        }
     }
 
     /**
      * Create one thermal, one smoke, one humidity sensor per zone.
      */
     private void initializeSensors() {
-        for (ForestRiskRegionCatalog.RiskRegion region : ZONE_CATALOG) {
-            String zone = region.zoneName();
-            String z = zone.toLowerCase().replace(" ", "_");
-            sensors.put(z + "_thermal", new ThermalSensor(z + "_thermal", zone, zone + " ridge"));
-            sensors.put(z + "_smoke", new SmokeSensor(z + "_smoke", zone, zone + " core"));
-            sensors.put(z + "_humidity", new HumiditySensor(z + "_humidity", zone, zone + " edge"));
-        }
+        // Dummy sensors removed as per user request to use only employee-managed sensors.
     }
 
     /**
      * Simulate all sensors and update readings + alerts.
      * Called by scheduler every few seconds.
+     * Iterates ALL sensors in the map (including employee-created ones restored from DB)
+     * so dynamic sensors are always included in live readings and the map snapshot.
      */
     @Transactional
     public void simulateAll() {
+        // Group all active sensors by zone (handles both hardcoded and DB-restored sensors)
         Map<String, List<SensorReading>> newReadings = new LinkedHashMap<>();
 
+        // Seed the map with all known zones first so zones with no sensor readings still appear
         for (ForestRiskRegionCatalog.RiskRegion region : ZONE_CATALOG) {
-            String zone = region.zoneName();
-            List<SensorReading> zoneReadings = new ArrayList<>();
-            String z = zone.toLowerCase().replace(" ", "_");
+            newReadings.put(region.zoneName(), new ArrayList<>());
+        }
 
-            String[] types = {"thermal", "smoke"};
-            for (String type : types) {
-                Sensor sensor = sensors.get(z + "_" + type);
-                if (sensor != null && sensor.isActive()) {
-                    double value = sensor.simulate();
-                    String status = computeStatus(sensor, value);
-                    SensorReading reading = new SensorReading(
-                            sensor.getSensorId(),
-                            sensor.getSensorType(),
-                            sensor.getZone(),
-                            sensor.getLocation(),
-                            value,
-                            sensor.getUnit(),
-                            status,
-                            LocalDateTime.now(),
-                            sensor.getDangerThreshold()
-                    );
-                    zoneReadings.add(reading);
-                }
-            }
-            newReadings.put(zone, zoneReadings);
+        // Simulate EVERY sensor in the map (both system and employee-created)
+        for (Sensor sensor : sensors.values()) {
+            if (!sensor.isActive()) continue;
+
+            double value = sensor.simulate();
+            String status = computeStatus(sensor, value);
+            SensorReading reading = new SensorReading(
+                    sensor.getSensorId(),
+                    sensor.getSensorType(),
+                    sensor.getZone(),
+                    sensor.getLocation(),
+                    value,
+                    sensor.getUnit(),
+                    status,
+                    LocalDateTime.now(),
+                    sensor.getDangerThreshold()
+            );
+            newReadings.computeIfAbsent(sensor.getZone(), k -> new ArrayList<>()).add(reading);
         }
 
         latestReadings.putAll(newReadings);
@@ -515,6 +550,86 @@ public class SensorSimulationService {
         entity.setZone(zoneEntity);
 
         SensorEntity saved = sensorRepository.save(entity);
+        sensors.put(saved.getSensorId(), new ConfiguredSensor(
+                saved.getSensorId(),
+                zoneEntity.getName(),
+                saved.getLocation(),
+                sensorType,
+                model,
+                inferUnit(sensorType),
+                inferDangerThreshold(sensorType),
+                inferWarningThreshold(sensorType),
+                coverageRadiusKm
+        ));
+
+        return new ForestMapSensor(
+                saved.getSensorId(),
+                saved.getSensorType(),
+                saved.getModel(),
+                zoneEntity.getName(),
+                saved.getLocation(),
+                saved.getLatitude(),
+                saved.getLongitude(),
+                0.0,
+                inferUnit(sensorType),
+                "SAFE",
+                LocalDateTime.now(),
+                inferDangerThreshold(sensorType),
+                saved.getCoverageRadiusKm(),
+                saved.getCreatedByRole(),
+                saved.getCreatedByUsername()
+        );
+    }
+
+    @Transactional
+    public synchronized void deleteAdminSensor(String sensorId, String actorRole, String creatorUsername) {
+        if (!ROLE_EMPLOYEE.equalsIgnoreCase(actorRole)) {
+            throw new IllegalArgumentException("Only EMPLOYEE role can delete sensors");
+        }
+
+        SensorEntity entity = sensorRepository.findBySensorId(sensorId)
+                .orElseThrow(() -> new IllegalArgumentException("Sensor not found: " + sensorId));
+
+        if (!creatorUsername.equals(entity.getCreatedByUsername())) {
+            throw new IllegalArgumentException("You can only delete sensors you created");
+        }
+
+        sensorReadingRepository.deleteBySensor(entity);
+        sensorRepository.delete(entity);
+        sensors.remove(sensorId);
+    }
+
+    @Transactional
+    public synchronized ForestMapSensor updateAdminSensor(String sensorId, AdminSensorRequest request, String actorRole, String creatorUsername) {
+        if (!ROLE_EMPLOYEE.equalsIgnoreCase(actorRole)) {
+            throw new IllegalArgumentException("Only EMPLOYEE role can update sensors");
+        }
+
+        SensorEntity entity = sensorRepository.findBySensorId(sensorId)
+                .orElseThrow(() -> new IllegalArgumentException("Sensor not found: " + sensorId));
+
+        if (!creatorUsername.equals(entity.getCreatedByUsername())) {
+            throw new IllegalArgumentException("You can only update sensors you created");
+        }
+
+        ForestZoneEntity zoneEntity = forestZoneRepository.findByNameIgnoreCase(request.getZoneName())
+                .orElseThrow(() -> new IllegalArgumentException("Zone not found: " + request.getZoneName()));
+
+        String sensorType = (request.getSensorType() == null ? "THERMAL" : request.getSensorType().trim().toUpperCase());
+        String model = StringUtils.hasText(request.getModel()) ? request.getModel().trim() : resolveSensorModel(sensorType);
+        String location = StringUtils.hasText(request.getLocation()) ? request.getLocation().trim() : zoneEntity.getName() + " field node";
+        double coverageRadiusKm = request.getCoverageRadiusKm() > 0 ? request.getCoverageRadiusKm() : resolveCoverageRadius(sensorType);
+
+        entity.setSensorType(sensorType);
+        entity.setModel(model);
+        entity.setLocation(location);
+        entity.setLatitude(request.getLatitude());
+        entity.setLongitude(request.getLongitude());
+        entity.setCoverageRadiusKm(coverageRadiusKm);
+        entity.setZone(zoneEntity);
+
+        SensorEntity saved = sensorRepository.save(entity);
+
         sensors.put(saved.getSensorId(), new ConfiguredSensor(
                 saved.getSensorId(),
                 zoneEntity.getName(),

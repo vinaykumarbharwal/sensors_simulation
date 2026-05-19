@@ -20,4 +20,6 @@ public interface SensorReadingRepository extends JpaRepository<SensorReadingEnti
     List<SensorReadingEntity> findRecentByZoneWithDetails(@Param("zoneName") String zoneName, @Param("cutoff") LocalDateTime cutoff, Pageable pageable);
 
     long deleteByTimestampBefore(LocalDateTime cutoff);
+
+    void deleteBySensor(com.forestfire.entity.SensorEntity sensor);
 }

@@ -74,7 +74,7 @@ function Dashboard({ session, onSessionUpdate, onLogout }: DashboardProps) {
   const [activePage, setActivePage] = useState<DashboardPage>('overview')
   const [selectedZone, setSelectedZone] = useState<ZoneData | null>(null)
 
-  const { loading, refreshing, error, authExpired, dashboard, map, health, alertsHistory, readingsHistory, lastUpdated, activeAlerts } =
+  const { loading, refreshing, error, authExpired, dashboard, map, health, alertsHistory, readingsHistory, lastUpdated, activeAlerts, forceRefresh } =
     useDashboardData(true)
   const { toasts, processAlerts, dismiss } = useAlertToast()
 
@@ -140,7 +140,7 @@ function Dashboard({ session, onSessionUpdate, onLogout }: DashboardProps) {
             Grouped controls for outpost sensors, satellite coverage, and maintenance logs.
           </p>
         </div>
-        <OperationsAdminPanel snapshot={map!} userRole={session.role} />
+        <OperationsAdminPanel snapshot={map!} userRole={session.role} onRefresh={forceRefresh} />
       </div>
     )
   }
@@ -278,7 +278,7 @@ function Dashboard({ session, onSessionUpdate, onLogout }: DashboardProps) {
             )}
 
             {activePage === 'overview' && (
-              <div className="space-y-8">
+              <div key="overview" className="space-y-8 page-enter">
                 <Header timestamp={syncTimestamp} status={health?.status || 'UNKNOWN'} database={health?.database || 'UNKNOWN'} />
                 <ForestMapPanel 
                   snapshot={map} 
@@ -292,15 +292,15 @@ function Dashboard({ session, onSessionUpdate, onLogout }: DashboardProps) {
             )}
 
             {activePage === 'alerts' && (
-              <div className="w-full">
+              <div key="alerts" className="w-full page-enter">
                 <AlertsPanel activeAlerts={activeAlerts} alertsHistory={alertsHistory} zones={map?.zones ?? []} />
               </div>
             )}
 
-            {activePage === 'operations' && renderOperationsPage()}
+            {activePage === 'operations' && <div key="operations" className="page-enter">{renderOperationsPage()}</div>}
 
             {activePage === 'health' && (
-              <div className="grid gap-8 xl:grid-cols-[1fr_1fr] items-start">
+              <div key="health" className="grid gap-8 xl:grid-cols-[1fr_1fr] items-start page-enter">
                 <div className="space-y-8">
                   <HealthPanel health={health} />
                   <SensorReadingsPanel readings={readingsHistory} />
@@ -317,7 +317,7 @@ function Dashboard({ session, onSessionUpdate, onLogout }: DashboardProps) {
               </div>
             )}
 
-            {activePage === 'account' && <AccountPanel session={session} onSessionUpdate={onSessionUpdate} />}
+            {activePage === 'account' && <div key="account" className="page-enter"><AccountPanel session={session} onSessionUpdate={onSessionUpdate} /></div>}
           </div>
         </main>
       </div>

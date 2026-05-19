@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { apiClient, isAuthError } from '../api/client'
+import { apiClient, getAuthSession, isAuthError } from '../api/client'
 import { ALERT_HISTORY_LIMIT, DASHBOARD_POLL_MS, READING_HISTORY_LIMIT } from '../config/env'
 import type { DashboardData, FireAlert, HealthData, MapSensor, MapSnapshot, SensorReading, ZoneData } from '../types/api'
 
@@ -63,6 +63,7 @@ export function useDashboardData(enabled = true) {
   const [state, setState] = useState<DashboardState>(initialState)
   const inFlightRef = useRef(false)
   const activeControllerRef = useRef<AbortController | null>(null)
+  const loadFnRef = useRef<((isInitial: boolean) => Promise<void>) | null>(null)
 
   async function loadCriticalData(controller: AbortController) {
     const maxAttempts = 2
@@ -91,9 +92,15 @@ export function useDashboardData(enabled = true) {
 
   async function loadHistoricalData(controller: AbortController) {
     try {
+      // For EMPLOYEE role, pass their assigned zone to the API so the backend
+      // only returns data scoped to their zone
+      const currentSession = getAuthSession()
+      const isEmployee = currentSession?.role?.toUpperCase() === 'EMPLOYEE'
+      const zoneFilter = isEmployee && currentSession?.assignedZone ? currentSession.assignedZone : undefined
+
       const [alertsHistory, readingsHistory] = await Promise.all([
-        apiClient.getAlertsHistory(ALERT_HISTORY_LIMIT, undefined, controller.signal),
-        apiClient.getReadingsHistory(READING_HISTORY_LIMIT, undefined, controller.signal),
+        apiClient.getAlertsHistory(ALERT_HISTORY_LIMIT, zoneFilter, controller.signal),
+        apiClient.getReadingsHistory(READING_HISTORY_LIMIT, zoneFilter, controller.signal),
       ])
       return { alertsHistory, readingsHistory }
     } catch (error) {
@@ -118,7 +125,7 @@ export function useDashboardData(enabled = true) {
     let mounted = true
 
     const load = async (isInitialLoad: boolean) => {
-      if (inFlightRef.current) {
+      if (inFlightRef.current && !isInitialLoad) {
         return
       }
 
@@ -164,7 +171,7 @@ export function useDashboardData(enabled = true) {
           lastUpdated: new Date().toISOString(),
         }))
 
-        // Phase 2: Load historical data in background (non-blocking)
+        // Phase 2: Load history only on initial load or force refresh (skip on auto-polls for speed)
         if (isInitialLoad) {
           const historicalData = await loadHistoricalData(controller)
           if (mounted && historicalData) {
@@ -204,6 +211,7 @@ export function useDashboardData(enabled = true) {
       }
     }
 
+    loadFnRef.current = load
     void load(true)
     const timerId = window.setInterval(() => {
       void load(false)
@@ -216,12 +224,31 @@ export function useDashboardData(enabled = true) {
     }
   }, [enabled])
 
+  // Imperative refresh — components call this instead of window.location.reload()
+  const forceRefresh = () => {
+    if (loadFnRef.current) {
+      void loadFnRef.current(true)
+    }
+  }
+
   const activeAlerts = useMemo(() => {
-    return state.dashboard?.activeAlerts.filter((alert) => !alert.resolved) ?? []
+    const currentSession = getAuthSession()
+    const isEmployee = currentSession?.role?.toUpperCase() === 'EMPLOYEE'
+    const assignedZone = currentSession?.assignedZone
+
+    let alerts = state.dashboard?.activeAlerts.filter((alert) => !alert.resolved) ?? []
+
+    // EMPLOYEE: only show alerts from their assigned zone
+    if (isEmployee && assignedZone) {
+      alerts = alerts.filter((alert) => alert.zone === assignedZone)
+    }
+
+    return alerts
   }, [state.dashboard])
 
   return {
     ...state,
     activeAlerts,
+    forceRefresh,
   }
 }
