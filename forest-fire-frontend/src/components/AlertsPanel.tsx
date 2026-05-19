@@ -342,7 +342,7 @@ export function AlertsPanel({ activeAlerts, alertsHistory, zones = [] }: AlertsP
                           <ResponseCard
                             icon="🚁"
                             label="Deployment"
-                            value={responsePlan?.responseType === 'MANPOWER_AND_UAV' ? 'Ground + UAV' : 'Ground Teams'}
+                            value={responsePlan?.responseMode === 'MANPOWER_AND_UAV' ? 'Ground + UAV' : 'Ground Teams'}
                             accent={styles.accent}
                           />
                           <ResponseCard

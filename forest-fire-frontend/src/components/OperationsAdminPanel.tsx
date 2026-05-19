@@ -427,7 +427,7 @@ export function OperationsAdminPanel({ snapshot, userRole, onRefresh }: Operatio
                     <p className="text-xs text-text-muted mt-1">Use the form to deploy your first sensor.</p>
                   </div>
                 ) : (
-                  currentZoneSensors.map((sensor, index) => {
+                  currentZoneSensors.map((sensor) => {
                     const info = sensorTypeInfo[sensor.sensorType] || sensorTypeInfo.THERMAL
                     const isEditing = editingSensorId === sensor.sensorId
                     const isDanger = sensor.status === 'DANGER' || sensor.status === 'CRITICAL'
