@@ -1,14 +1,14 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { clearAuthSession, getAuthSession } from './api/client'
 import { AlertsPanel } from './components/AlertsPanel'
 import { AppErrorBoundary } from './components/AppErrorBoundary'
 import { AccountPanel } from './components/AccountPanel'
-import { ForestMapPanel } from './components/ForestMapPanel'
+const ForestMapPanel = lazy(() => import('./components/ForestMapPanel').then(m => ({ default: m.ForestMapPanel })))
 import { Header } from './components/Header'
 import { HealthPanel } from './components/HealthPanel'
 import { LoginPanel } from './components/LoginPanel'
 import { LoadingState } from './components/LoadingState'
-import { OperationsAdminPanel } from './components/OperationsAdminPanel'
+const OperationsAdminPanel = lazy(() => import('./components/OperationsAdminPanel').then(m => ({ default: m.OperationsAdminPanel })))
 import { SensorReadingsPanel } from './components/SensorReadingsPanel'
 import { ToastContainer } from './components/ToastContainer'
 import { useAlertToast } from './hooks/useAlertToast'
@@ -123,7 +123,7 @@ function Dashboard({ session, onSessionUpdate, onLogout }: DashboardProps) {
 
   if (loading || authExpired) return <LoadingState />
   if (!dashboard || !map) {
-    return <ConnectionErrorState message={error || 'Unable to load data'} onRetry={() => window.location.reload()} onLogout={onLogout} />
+    return <ConnectionErrorState message={error || 'Unable to load data'} onRetry={forceRefresh} onLogout={onLogout} />
   }
 
   function renderOperationsPage() {
@@ -252,7 +252,7 @@ function Dashboard({ session, onSessionUpdate, onLogout }: DashboardProps) {
 
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200/80 text-[11px] font-bold text-text-secondary shadow-sm">
-                <span className={`pulse-dot ${refreshing ? 'bg-[#FF9933]' : 'bg-[#138808]'}`} />
+                <span className={refreshing ? 'pulse-dot bg-[#FF9933]' : 'live-indicator'} />
                 <span className="text-mono tracking-wider">{refreshing ? 'REFRESHING' : 'SECURE CONNECTED'}</span>
                 {syncTimestamp && <span className="opacity-20">|</span>}
                 {syncTimestamp && <span className="text-mono">{new Date(syncTimestamp).toLocaleTimeString()}</span>}
@@ -271,7 +271,7 @@ function Dashboard({ session, onSessionUpdate, onLogout }: DashboardProps) {
                   <p className="text-sm font-bold text-status-critical">Connection Error</p>
                   <p className="text-xs text-status-critical/80">{error}</p>
                 </div>
-                <button onClick={() => window.location.reload()} className="px-3 py-1 rounded bg-status-critical text-white text-xs font-bold">
+                <button onClick={forceRefresh} className="px-3 py-1 rounded bg-status-critical text-white text-xs font-bold">
                   Retry
                 </button>
               </div>
@@ -280,14 +280,16 @@ function Dashboard({ session, onSessionUpdate, onLogout }: DashboardProps) {
             {activePage === 'overview' && (
               <div key="overview" className="space-y-8 page-enter">
                 <Header timestamp={syncTimestamp} status={health?.status || 'UNKNOWN'} database={health?.database || 'UNKNOWN'} />
-                <ForestMapPanel 
-                  snapshot={map} 
-                  onZoneSelect={(zone) => {
-                    setSelectedZone(zone)
-                    setActivePage('alerts')
-                  }} 
-                  role={session.role} 
-                />
+                <Suspense fallback={<div className="skeleton skeleton-card" style={{ height: 400 }} />}>
+                  <ForestMapPanel 
+                    snapshot={map} 
+                    onZoneSelect={(zone) => {
+                      setSelectedZone(zone)
+                      setActivePage('alerts')
+                    }} 
+                    role={session.role} 
+                  />
+                </Suspense>
               </div>
             )}
 
@@ -297,7 +299,7 @@ function Dashboard({ session, onSessionUpdate, onLogout }: DashboardProps) {
               </div>
             )}
 
-            {activePage === 'operations' && <div key="operations" className="page-enter">{renderOperationsPage()}</div>}
+            {activePage === 'operations' && <div key="operations" className="page-enter"><Suspense fallback={<div className="skeleton skeleton-card" style={{ height: 300 }} />}>{renderOperationsPage()}</Suspense></div>}
 
             {activePage === 'health' && (
               <div key="health" className="grid gap-8 xl:grid-cols-[1fr_1fr] items-start page-enter">
@@ -305,7 +307,7 @@ function Dashboard({ session, onSessionUpdate, onLogout }: DashboardProps) {
                   <HealthPanel health={health} />
                   <SensorReadingsPanel readings={readingsHistory} />
                 </div>
-                <div className="flex flex-col gap-6 h-full max-h-[85vh] overflow-y-auto pr-2 custom-scrollbar">
+                <div className="flex flex-col gap-6 h-full max-h-[85vh] overflow-y-auto pr-2 custom-scrollbar stagger-children">
                   {session.role.toUpperCase() === 'HEAD' ? (
                     (map?.zones ?? []).map((zone) => (
                       <ZoneSummaryCard key={zone.zoneName} zone={zone} />
@@ -375,7 +377,7 @@ function ZoneSummaryCard({ zone }: { zone: ZoneData }) {
   const statusClass = zone.overallStatus?.toLowerCase() || 'safe'
   
   return (
-    <section className={`zone-card status-${statusClass}`}>
+    <section className={`zone-card card-lift status-${statusClass}`}>
       <div className="flex items-center justify-between mb-4">
         <div>
           <p className="heading-caps mb-1">Zone Overview</p>

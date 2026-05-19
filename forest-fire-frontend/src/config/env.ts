@@ -7,7 +7,7 @@ export const API_BASE_URL = configuredApiBaseUrl && configuredApiBaseUrl.length 
     ? localApiBaseUrl
     : 'https://sensors-simulation.onrender.com/api/v1'
 
-export const DASHBOARD_POLL_MS = 20_000
+export const DASHBOARD_POLL_MS = 12_000
 export const ALERT_HISTORY_LIMIT = 24
 export const READING_HISTORY_LIMIT = 80
 export const API_TIMEOUT_MS = 10_000

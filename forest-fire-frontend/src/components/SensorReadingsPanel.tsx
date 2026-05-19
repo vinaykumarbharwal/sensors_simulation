@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import type { SensorReading } from '../types/api'
 import { ExportButton } from './ExportButton'
 import { getAuthSession } from '../api/client'
@@ -19,7 +19,7 @@ function statusStyle(s: string): React.CSSProperties {
   return { backgroundColor: 'rgba(16,185,129,0.1)', color: '#10B981' }
 }
 
-function Sparkline({ data, color }: { data: number[]; color: string }) {
+const Sparkline = memo(function Sparkline({ data, color }: { data: number[]; color: string }) {
   if (data.length < 2) return <div className="h-4 w-12" />
   
   const min = Math.min(...data)
@@ -45,7 +45,7 @@ function Sparkline({ data, color }: { data: number[]; color: string }) {
       />
     </svg>
   )
-}
+})
 
 export function SensorReadingsPanel({ readings }: SensorReadingsPanelProps) {
   const [sensorTypeFilter, setSensorTypeFilter] = useState<'ALL' | 'THERMAL' | 'SMOKE' | 'HUMIDITY'>('ALL')
@@ -104,21 +104,21 @@ export function SensorReadingsPanel({ readings }: SensorReadingsPanelProps) {
       </div>
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-4 gap-2 mb-5">
+      <div className="grid grid-cols-4 gap-2 mb-5 stagger-children">
         <div className="rounded-lg p-2.5 text-center" style={{ border: '1px solid #E2E8F0', backgroundColor: '#F8FAFC' }}>
-          <p className="text-lg font-black text-mono" style={{ color: '#0F172A' }}>{stats.total}</p>
+          <p className="text-lg font-black text-mono stat-value" style={{ color: '#0F172A' }}>{stats.total}</p>
           <p className="text-[9px] font-bold uppercase tracking-wider" style={{ color: '#94A3B8' }}>Total</p>
         </div>
         <div className="rounded-lg p-2.5 text-center" style={{ border: '1px solid rgba(16,185,129,0.2)', backgroundColor: 'rgba(16,185,129,0.05)' }}>
-          <p className="text-lg font-black text-mono" style={{ color: '#10B981' }}>{stats.safe}</p>
+          <p className="text-lg font-black text-mono stat-value" style={{ color: '#10B981' }}>{stats.safe}</p>
           <p className="text-[9px] font-bold uppercase tracking-wider" style={{ color: 'rgba(16,185,129,0.7)' }}>Safe</p>
         </div>
         <div className="rounded-lg p-2.5 text-center" style={{ border: '1px solid rgba(245,158,11,0.2)', backgroundColor: 'rgba(245,158,11,0.05)' }}>
-          <p className="text-lg font-black text-mono" style={{ color: '#F59E0B' }}>{stats.warning}</p>
+          <p className="text-lg font-black text-mono stat-value" style={{ color: '#F59E0B' }}>{stats.warning}</p>
           <p className="text-[9px] font-bold uppercase tracking-wider" style={{ color: 'rgba(245,158,11,0.7)' }}>Warning</p>
         </div>
         <div className="rounded-lg p-2.5 text-center" style={{ border: '1px solid rgba(239,68,68,0.2)', backgroundColor: 'rgba(239,68,68,0.05)' }}>
-          <p className="text-lg font-black text-mono" style={{ color: '#EF4444' }}>{stats.danger}</p>
+          <p className="text-lg font-black text-mono stat-value" style={{ color: '#EF4444' }}>{stats.danger}</p>
           <p className="text-[9px] font-bold uppercase tracking-wider" style={{ color: 'rgba(239,68,68,0.7)' }}>Danger</p>
         </div>
       </div>
