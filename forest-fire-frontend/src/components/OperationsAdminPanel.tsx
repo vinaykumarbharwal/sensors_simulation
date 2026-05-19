@@ -714,11 +714,13 @@ export function OperationsAdminPanel({ snapshot, userRole, onRefresh }: Operatio
                         </div>
                       )}
                     </div>
-                  ))
+                    )
+                  })
                 )}
               </div>
             </div>
           </div>
+        )}
       </div>
     </section>
   )
