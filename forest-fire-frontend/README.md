@@ -1,73 +1,58 @@
-# Vanrakshak — Frontend (React + TypeScript + Vite)
+# Vanrakshak Frontend
 
-Frontend for Vanrakshak, a monitoring and early-warning dashboard for tracked zones. Built with React, TypeScript, and Vite.
+React + TypeScript dashboard for the Vanrakshak forest fire early detection system.
 
-Currently, two official plugins are available:
+## What the frontend does
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Provides the login and dashboard experience for employee and head/admin users.
+- Displays map, alerts, health, account, and operations panels.
+- Polls the backend for live data and refreshes the dashboard state.
+- Stores the current auth session in browser local storage.
 
-## React Compiler
+## Tech stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- React 19
+- TypeScript
+- Vite
+- Leaflet and react-leaflet
+- ESLint
 
-## Expanding the ESLint configuration
+## Prerequisites
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- Node.js 20+
+- npm 10+
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Run locally
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+The frontend talks to `http://localhost:8081/api/v1` by default in development.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Build and lint
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run build
+npm run lint
 ```
+
+## Configuration
+
+- `VITE_API_BASE_URL` - overrides the backend API base URL.
+
+If the variable is not set, the app uses the local backend in development and the deployed API URL in production.
+
+## Main structure
+
+- `src/App.tsx` - application shell, login flow, and dashboard routing.
+- `src/api/client.ts` - API client, auth session storage, and request helpers.
+- `src/components/` - dashboard panels, layout, and shared UI.
+- `src/hooks/` - dashboard data fetching, alerts, and UI helpers.
+- `src/types/` - shared frontend data types.
+
+## Notes
+
+- The dashboard is designed to work with the backend routes documented in the backend README.
+- See `../README.md` for the repository entry point and project links.
