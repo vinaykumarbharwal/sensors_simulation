@@ -19,3 +19,10 @@ target/
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Generated benchmark artifacts (keep the compact, reviewed summary)
+benchmark_results/*
+!benchmark_results/jmeter-50-users-populated/
+benchmark_results/jmeter-50-users-populated/*
+!benchmark_results/jmeter-50-users-populated/SUMMARY.md
+benchmarks/*.zip

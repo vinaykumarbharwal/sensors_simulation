@@ -27,3 +27,18 @@ Vanrakshak is a forest fire monitoring and early warning system with a Spring Bo
 - Backend API base path: `/api/v1`
 - Local backend port: `8081`
 - Frontend development API target: `http://localhost:8081/api/v1`
+
+## Performance testing
+
+The backend includes an authenticated Apache JMeter workload covering the
+sensor-readings, alerts, dashboard, readings-history, and zones APIs. See the
+[JMeter test plan](benchmarks/jmeter/vanrakshak-load-test.jmx) and the
+[benchmark report](benchmarks/vanrakshak_benchmark_kit/benchmark_kit/BENCHMARK_REPORT.md).
+
+## Contributors
+
+- **Nikhil** — Spring Boot backend, REST APIs, JWT security, persistence,
+  sensor-simulation and alerting logic, and backend performance testing.
+- **[Vinay Kumar Bharwal](https://github.com/vinaykumarbharwal)** — React,
+  TypeScript, and Vite frontend technology, dashboard UI, and frontend
+  integration.
